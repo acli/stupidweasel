@@ -1,0 +1,65 @@
+#!/usr/bin/perl
+# vi:set sw=2 ai sm:
+#
+# sygw - sysline gateway
+
+use strict;
+use integer;
+
+# see https://stackoverflow.com/questions/6162484/why-does-modern-perl-avoid-utf-8-by-default for these crazy hacks
+# THERE ARE MORE CRAZY HACKS THERE FOR MORE COMPLEX PROJECTS!!
+#use v5.14; # //u modifier
+use utf8;
+use open qw( :encoding(UTF-8) :std );
+use charnames qw( :full :short );
+use feature "unicode_strings";
+
+use POSIX;
+use Getopt::Long;
+
+use Data::Dumper;
+
+use vars qw( $debug_p );
+use vars qw( $dry_run_p );
+use vars qw( $test_p );
+use vars qw( $n );
+use vars qw( $output_path );
+
+$output_path = '/tmp/slgw.out';
+
+GetOptions(
+  'debug|d' => \$debug_p,
+  'dry-run|n' => \$dry_run_p,
+  'test' => \$test_p,
+) || exit(1);
+
+open(OUTPUT, '>>', $output_path) || die "$output_path: $!\n";
+my($headers, $from);
+for (;;) {
+  my $s = scalar <>;
+last unless defined $s;
+  $headers .= $s;
+  if ($s =~ /^From:.*<([^<>]*)>/i) {
+    $from = $1;
+  } elsif ($s =~ /^From:\s*(.*)\s*$/i) {
+    $from = $1;
+    $from =~ s/\(.*?\)//sg;
+    $from =~ s/^\s+//s;
+    $from =~ s/\s+$//s;
+  }
+  $n += 1;
+}
+if ($n) {
+  $from = 'MAILER-DAEMON' unless defined $from;
+  print STDERR "from=($from)\n" if $debug_p;
+  print OUTPUT sprintf("From %s %s\n", $from, scalar gmtime) unless $dry_run_p;
+  print OUTPUT $headers unless $dry_run_p;
+  for (;;) {
+    my $s = scalar <>;
+  last unless defined $s;
+    print OUTPUT $s unless $dry_run_p;
+    $n += 1;
+  }
+}
+print OUTPUT "\n" if $n;	# doesn't matter for sysline; needed to keep the file actual mbox format
+print "$n line(s) read\n" if $test_p;
