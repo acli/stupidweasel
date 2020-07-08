@@ -1,5 +1,7 @@
 #!/usr/bin/perl
 # vi: set sw=3 ai sm:
+#
+# Stupid hack to use Evolution as a mail transport so that we can use mutt if necessary
 
 use strict;
 use integer;
