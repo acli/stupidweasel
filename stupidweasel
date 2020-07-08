@@ -100,7 +100,7 @@ sub read_evolution_sources () {
 }
 
 sub copy_stdin_to_outbox () {
-   open(OUTPUT, '>', $out) || die "$appName: $out: $!\n";
+   open(OUTPUT, '>', $tmp) || die "$appName: $tmp: $!\n";
    my($from, $uid);
    for (my $in_body_p = 0;;) {
       my $s = scalar <STDIN>;
@@ -124,14 +124,14 @@ sub copy_stdin_to_outbox () {
    }
    die "$appName: From header not detected\n" unless defined $uid;
    close OUTPUT;
-   print STDERR "$appName: Moving ($tmp) -> ($out)\n";
+   print STDERR "$appName: Moving ($tmp) -> ($out)\n" if $debug_p;
    rename $tmp, $out || die "$appName: $out: Rename to \"$out\" failed\n";
 }
 
 GetOptions(
    'd|debug'	=> \$debug_p,
    'n|dry-run'	=> \$dry_run_p,
-   'version'	=> show_version_then_exit,
+   'version'	=> \&show_version_then_exit,
 ) || exit(1);
 
 ($tmp, $out) = ("$id.tmp", "$id.out") if $dry_run_p;
