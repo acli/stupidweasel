@@ -121,8 +121,48 @@ sub read_evolution_sources () {
    closedir SOURCES;
 }
 
+sub scan_mbox_file ($$$$) {
+   my($filename, $f_header, $f_sep, $f_body) = @_;
+   my $state = 0;			# State 0 - From_ or header; 1 - header, separator; 3 - body
+   my($from_, @headers);
+   my $h;
+   if (!$filename || $filename eq '-') {
+      ($filename, $h) = ('STDIN', *STDIN);
+   } else {
+      open MBOX, '<', $filename || die "$filename: $!\n";
+      $h = *MBOX;
+   }
+   for (my $in_body_p = 0;;) {
+      my $s = scalar <$h>;
+   last unless defined $s;
+      if ($state == 0 && $s =~ /^From /s) {
+	 $from_ = $s;
+	 $state = 1;
+      } elsif ($state <= 1) {
+	 $state = 1;
+	 if ($s eq "\n") {
+	    for my $header ($from_, @headers) {
+	       &$f_header($header->[0], $filename, $header->[1]);
+	    }
+	    &$f_sep($s, $filename, $.);
+	    $state = 3;
+	 } elsif ($s =~ /^\s/s) {
+	    die "$filename: $.: Illegal continuation header\n" unless @headers;
+	    $headers[$#headers]->[0] .= $s;
+	 } else {
+	    push @headers, [$s, $.];
+	 }
+      } elsif ($state == 3) {
+	 &$f_body($s, $filename, $.);
+      } else {
+	 die "$filename: $.: Internal error: Unexpected state $state\n";
+      }
+   }
+   close MBOX;
+}
+
 sub display_outbox_summary () {
-   my $fmt = "%-16s  %s\n";
+   my $fmt = "%-30s  %-19s  %-9s  %-24s  %s\n";
    opendir(OUTBOX, "$outbox/cur") || die "$appName: $outbox/cur: $!\n";
    for (my $something_done_p;;) {
       my $dirent = readdir OUTBOX;
@@ -132,12 +172,32 @@ sub display_outbox_summary () {
 	 my($basename, $flags) = ($1, $2);
 	 my $deleted = $flags =~ /T/;
 	 if (!$deleted) {
+	    my($date, $from, $to, $user_agent);
+	    scan_mbox_file($candidate, sub {
+		     my($s, $filename, $lineno) = @_;
+		     if ($s =~ /^From:.*<([^<>]*)>/is || $s =~ /^From:\s*(\S+?)\s*\(.*?\)\s*$/is || $s =~ /^From:\s*(\S+)\s*$/is) {
+			$from = $1;
+		     } elsif ($s =~ /^To:.*<([^<>]*)>/is || $s =~ /^To:\s*(\S+?)\s*\(.*?\)\s*$/is || $s =~ /^To:\s*(\S+)\s*$/is) {
+			$to = $1;
+		     } elsif ($s =~ /^Date:\s*(.*?)\s*$/is) {
+			$date = $1;
+		     } elsif ($s =~ /^(?:User-Agent|X-Mailer):\s*(.*?)\s*$/is) {
+			$user_agent = $1;
+		     }
+		  }, sub { return; }, sub { return; });
+
 	    if (!$something_done_p) {
-	       printf $fmt, 'Id', 'Queued';
+	       printf $fmt, 'Id', 'Queued', 'By', 'From', 'To';
 	       $something_done_p = 1;
 	    }
+	    if (defined $user_agent) {
+	       $user_agent =~ s/\([^\(\)]*\)//gs;
+	       $user_agent =~ s/ {2,}/ /gs;
+	       $user_agent =~ s/\s*\n/\n/gs;
+	       $user_agent =~ s/[\/\s].*//s; # cut out any version information, for brevity
+	    }
 	    my $mtime = (stat $candidate)[9];
-	    printf $fmt, $basename, POSIX::strftime('%Y-%m-%d %H:%M:%S', localtime $mtime);
+	    printf $fmt, $basename, POSIX::strftime('%Y-%m-%d %H:%M:%S', localtime $mtime), $user_agent, $from, $to;
 	 }
       }
    }
@@ -154,24 +214,28 @@ sub remove_queued_email () {
 	 my $deleted = $flags =~ /T/;
 	 if (defined $targets{$basename}) {
 	    if ($deleted) {
-	       printf "$appName: %s: Already in Trash\n", $basename;
+	       print "$appName: $basename: Already in Trash\n";
 	    } elsif (!$flags) {	# Evolution hasn't seen it yet
 	       my $target = "$outbox/cur/$dirent";
 	       if ($dry_run_p) {
-		  printf "$appName: Pretending to delete %s\n", $target;
+		  print "$appName: Pretending to delete $target\n";
 	       } else {
 		  unlink $target || warn "$appName: $target: $!\n";
 	       }
 	    } else {		# Evolution has already seen it
 	       my $target = "$basename:2,T$flags";
 	       if ($dry_run_p) {
-		  printf "$appName: Pretending to rename %s to %s\n", $dirent, $target;
+		  print "$appName: Pretending to rename $dirent to $target\n";
 	       } else {
 		  rename "$outbox/cur/$dirent", "$outbox/cur/$target" || die "$appName: $outbox/cur/$dirent: $!\n";
 	       }
 	    }
+	    delete $targets{$basename};
 	 }
       }
+   }
+   for my $orphan (sort keys %targets) {
+      print "$appName: $orphan: Not found in Outbox\n";
    }
    closedir OUTBOX;
 }
@@ -192,7 +256,8 @@ sub copy_stdin_to_outbox () {
 	    print STDERR "$appName: Detected from ($from)\n" if $debug_p;
 	    die "$appName: $from: Identity not found in evolution config\n" unless defined $uid;
 	    printf OUTPUT "X-Evolution-Identity: %s\n", $uid;
-	    printf OUTPUT "Received: (from $<\@localhost) by $hostname ($mtaid) id <$id>; %s\n",
+	    printf OUTPUT "Received: (from %d\@localhost) by %s (%s) id <%s>; %s\n",
+		  $<, $hostname, $mtaid, $id,
 		  POSIX::strftime('%a, %e %b %Y %H:%M:%S %z', localtime time);
 	 }
       } else {
@@ -215,6 +280,14 @@ GetOptions(
    'help'	=> \&show_usage_then_exit,
    'version'	=> \&show_version_then_exit,
 ) || show_usage_then_exit(1);
+
+die "$appName: Unknown options @ARGV\n" if @ARGV && $mode ne 'rm';
+if ($mode eq 'rm') {
+   for my $arg (@ARGV) {
+      $targets{$arg} = 0;
+   }
+   @ARGV = ();
+}
 
 ($tmp, $out) = ("$id.tmp", "$id.out") if $dry_run_p;
 $ENV{LANG} = 'C';
