@@ -27,6 +27,12 @@ Sending
 In .muttrc, set sendmail to the full path of where you installed this script.
 The script must not be installed with a name that ends in “q” or “rm”.
 
+In this mode, the script will analyze the email that it receives from standard input;
+if a suitable Evolution identity is found,
+the email will be queued in Evolution’s Outbox.
+
+To actually send the mail, you must manually press the Send/Receive button in Evolution.
+
 List queue contents
 -------------------
 
