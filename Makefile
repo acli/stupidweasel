@@ -1,4 +1,4 @@
-targets=sendmail
+targets=stupidweasel
 bindir=$(HOME)/bin
 
 all:

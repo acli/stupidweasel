@@ -7,14 +7,21 @@ use strict;
 use integer;
 
 use Getopt::Long qw(:config no_auto_abbrev bundling);
+use POSIX;
 
 use vars qw( $outbox $sources );
 $outbox = "$ENV{HOME}/.local/share/evolution/mail/local/.Outbox";
 $sources = "$ENV{HOME}/.config/evolution/sources";
 
-use vars qw( $appName $id );
+use vars qw( $mtaid );
+$mtaid = 'stupidweasel';
+
+use vars qw( $appName $hostname $id );
 use vars qw( $tmp $out );
+
 $appName = $& if $0 =~ /[^\/]+$/;
+$hostname = `hostname`; chomp $hostname;
+
 $id = sprintf('%d-%d', time, $$);
 $tmp = "$outbox/tmp/$id";
 $out = "$outbox/cur/$id";
@@ -77,8 +84,10 @@ sub read_evolution_sources () {
 	 if (defined $mail_account && defined $authentication) {
 	    my $uid = get_scalar('IdentityUid', $mail_account);
 	    my $email = get_scalar('User', $authentication);
-	    print STDERR "$appName: $dirent: Detected email ($email) with X-Evolution-Identity ($uid)\n" if $debug_p;
-	    $identity{+lc $email} = $uid;
+	    if (defined $uid && defined $email) {
+	       print STDERR "$appName: $dirent: Detected email ($email) with X-Evolution-Identity ($uid)\n" if $debug_p;
+	       $identity{+lc $email} = $uid;
+	    }
 	 }
 	 close DATA;
       }
@@ -88,6 +97,9 @@ sub read_evolution_sources () {
 sub copy_stdin_to_outbox () {
    open(OUTPUT, '>', $out) || die "$appName: $out: $!\n";
    my($from, $uid);
+   printf OUTPUT "Received: (from $<\@localhost) by $hostname ($mtaid) id <$id>; %s\n",
+	 POSIX::strftime('%a, %e %b %Y %H:%M:%S %z', localtime time);
+
    for (my $in_body_p = 0;;) {
       my $s = scalar <>;
    last unless defined $s;
@@ -118,6 +130,7 @@ GetOptions(
 ) || exit(1);
 
 ($tmp, $out) = ("$id.tmp", "$id.out") if $dry_run_p;
+$ENV{LANG} = 'C';
 
 read_evolution_sources;
 copy_stdin_to_outbox;
