@@ -54,8 +54,12 @@ Bugs
 ====
 
 Mutt generates a User-Agent header (if configured to do so).
-Evolution generate an X-Mailer header *even if* an existing User-Agent header is present.
+Evolution generates an X-Mailer header *even if* an existing User-Agent header is present.
 It’s not known whether converting the User-Agent header to X-Mailer header will prevent this or not.
 
 Queue-listing mode assumes each email goes to only one recipient.
 This is of course wrong.
+
+Delete mode will actually delete the MH file from the Evolution Outbox.
+The correct way to do it would be to rename the file to include a T (trashed) flag,
+but Evolution seems to have some memory of what the name *should* be so renaming it doesn’t actually seem to work.
