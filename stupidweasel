@@ -97,11 +97,8 @@ sub read_evolution_sources () {
 sub copy_stdin_to_outbox () {
    open(OUTPUT, '>', $out) || die "$appName: $out: $!\n";
    my($from, $uid);
-   printf OUTPUT "Received: (from $<\@localhost) by $hostname ($mtaid) id <$id>; %s\n",
-	 POSIX::strftime('%a, %e %b %Y %H:%M:%S %z', localtime time);
-
    for (my $in_body_p = 0;;) {
-      my $s = scalar <>;
+      my $s = scalar <STDIN>;
    last unless defined $s;
       print OUTPUT $s;
       if ($in_body_p == 0) {
@@ -113,6 +110,8 @@ sub copy_stdin_to_outbox () {
 	    print STDERR "$appName: Detected from ($from)\n" if $debug_p;
 	    die "$appName: $from: Identity not found in evolution config\n" unless defined $uid;
 	    printf OUTPUT "X-Evolution-Identity: %s\n", $uid;
+	    printf OUTPUT "Received: (from $<\@localhost) by $hostname ($mtaid) id <$id>; %s\n",
+		  POSIX::strftime('%a, %e %b %Y %H:%M:%S %z', localtime time);
 	 }
       } else {
 	 ;
