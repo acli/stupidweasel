@@ -36,6 +36,11 @@ $SIG{__DIE__} = sub {
    }
 };
 
+sub show_version_then_exit () {
+   print "$mtaid ($appName) 0.1\n";
+   exit(0);
+}
+
 sub read_data (;*) {
    my($h) = @_;
    my $it;
@@ -126,6 +131,7 @@ sub copy_stdin_to_outbox () {
 GetOptions(
    'd|debug'	=> \$debug_p,
    'n|dry-run'	=> \$dry_run_p,
+   'version'	=> show_version_then_exit,
 ) || exit(1);
 
 ($tmp, $out) = ("$id.tmp", "$id.out") if $dry_run_p;
