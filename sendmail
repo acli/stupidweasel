@@ -1,0 +1,8 @@
+#!/bin/sh
+dir="$HOME/.local/share/evolution/mail/local/.Outbox/"
+if cat > "$dir/tmp/$$"; then
+	mv "$dir/tmp/$$" "$dir/cur/$$"
+else
+	rm "$dir/tmp/$$"
+	false
+fi
