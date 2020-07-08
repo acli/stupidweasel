@@ -1,8 +1,121 @@
-#!/bin/sh
-dir="$HOME/.local/share/evolution/mail/local/.Outbox/"
-if cat > "$dir/tmp/$$"; then
-	mv "$dir/tmp/$$" "$dir/cur/$$"
-else
-	rm "$dir/tmp/$$"
-	false
-fi
+#!/usr/bin/perl
+# vi: set sw=3 ai sm:
+
+use strict;
+use integer;
+
+use Getopt::Long qw(:config no_auto_abbrev bundling);
+
+use vars qw( $outbox $sources );
+$outbox = "$ENV{HOME}/.local/share/evolution/mail/local/.Outbox";
+$sources = "$ENV{HOME}/.config/evolution/sources";
+
+use vars qw( $appName $id );
+use vars qw( $tmp $out );
+$appName = $& if $0 =~ /[^\/]+$/;
+$id = sprintf('%d-%d', time, $$);
+$tmp = "$outbox/tmp/$id";
+$out = "$outbox/cur/$id";
+
+use vars qw( $debug_p $dry_run_p );
+use vars qw( %identity );
+
+$SIG{__DIE__} = sub {
+   if (-f $tmp) {
+      print STDERR "$appName: Removing temporary file $tmp\n";
+      unlink $tmp;
+   }
+};
+
+sub read_data (;*) {
+   my($h) = @_;
+   my $it;
+   my $section;
+   my $state = 0;
+   for (;;) {
+      my $s = scalar <$h>;
+   last unless defined $s;
+      chomp $s;
+      if ($s =~ /^\s*(?:\s*$|#|;|\/\/)/) {
+         ;
+      } elsif ($s =~ /^\s*\[(.*?)\]\s*$/) {
+         die "$appName: $ARGV:$.: $1: duplicate section\n" if defined $it && defined $it->{$1};
+         $section = $1;
+      } elsif ($s =~ /^\s*([^=]+?)\s*=\s*(.*?)\s*$/) {
+         $it->{$section} = { 'name' => [$section] } unless defined $it && defined $it->{$section};
+         $it->{$section}->{$1} = [] unless defined $it->{$section}->{$1};
+         push @{$it->{$section}->{$1}}, $2;
+      } else {
+         die "$appName: $ARGV:$.: sorry, can't parse ($s)\n";
+      }
+   }
+   return $it;
+}
+
+sub get_scalar ($$) {
+   my($key, $datum) = @_;
+   return !(defined $datum && defined $datum->{$key} && defined $datum->{$key}->[0])? undef: $datum->{$key}->[0];
+}
+
+sub get_array ($$) {
+   my($key, $datum) = @_;
+   return !(defined $datum && defined $datum->{$key})? undef: $datum->{$key};
+}
+
+sub read_evolution_sources () {
+   opendir(SOURCES, $sources) || die "$appName: $sources: $!\n";
+   for (;;) {
+      my $dirent = readdir SOURCES;
+   last unless defined $dirent;
+      if ($dirent =~ /\.source$/) {
+	 open(DATA, '<', "$sources/$dirent") || die "$appName: $sources/$dirent: $!\n";
+	 my $data = read_data DATA;
+	 my $mail_account = $data->{'Mail Account'};
+	 my $authentication = $data->{'Authentication'};
+	 if (defined $mail_account && defined $authentication) {
+	    my $uid = get_scalar('IdentityUid', $mail_account);
+	    my $email = get_scalar('User', $authentication);
+	    print STDERR "$appName: $dirent: Detected email ($email) with X-Evolution-Identity ($uid)\n" if $debug_p;
+	    $identity{+lc $email} = $uid;
+	 }
+	 close DATA;
+      }
+   }
+}
+
+sub copy_stdin_to_outbox () {
+   open(OUTPUT, '>', $out) || die "$appName: $out: $!\n";
+   my($from, $uid);
+   for (my $in_body_p = 0;;) {
+      my $s = scalar <>;
+   last unless defined $s;
+      print OUTPUT $s;
+      if ($in_body_p == 0) {
+	 if ($s eq "\n") {
+	    $in_body_p = 1;
+	 } elsif ($s =~ /^From:.*<([^<>]*)>/is || $s =~ /^From:\s*(\S+?)\s*\(.*?\)\s*$/is || $s =~ /^From:\s*(\S+)\s*$/is) {
+	    $from = $1;
+	    $uid = $identity{+lc $from};
+	    print STDERR "$appName: Detected from ($from)\n" if $debug_p;
+	    die "$appName: $from: Identity not found in evolution config\n" unless defined $uid;
+	    printf OUTPUT "X-Evolution-Identity: %s\n", $uid;
+	 }
+      } else {
+	 ;
+      }
+   }
+   die "$appName: From header not detected\n" unless defined $uid;
+   close OUTPUT;
+   print STDERR "$appName: Moving ($tmp) -> ($out)\n";
+   rename $tmp, $out || die "$appName: $out: Rename to \"$out\" failed\n";
+}
+
+GetOptions(
+   'd|debug'	=> \$debug_p,
+   'n|dry-run'	=> \$dry_run_p,
+) || exit(1);
+
+($tmp, $out) = ("$id.tmp", "$id.out") if $dry_run_p;
+
+read_evolution_sources;
+copy_stdin_to_outbox;
