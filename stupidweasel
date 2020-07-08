@@ -19,10 +19,13 @@ $mtaid = 'stupidweasel';
 use vars qw( $appName $hostname $id );
 use vars qw( $tmp $out );
 
+use vars qw( $mode );
+use vars qw( %targets );
+
 $appName = $& if $0 =~ /[^\/]+$/;
 $hostname = `hostname`; chomp $hostname;
 
-$id = sprintf('%d-%d', time, $$);
+$id = sprintf('%d.%d', time, $$);
 $tmp = "$outbox/tmp/$id";
 $out = "$outbox/cur/$id";
 
@@ -39,6 +42,24 @@ $SIG{__DIE__} = sub {
 sub show_version_then_exit () {
    print "$mtaid ($appName) 0.1\n";
    exit(0);
+}
+
+sub show_usage_then_exit (;$) {
+   my($status) = @_;
+   my $h = $status? *STDERR: *STDOUT;
+   print $h <<EOF;
+usage: $appName [OPTION] ...
+Queue a piece of email into Evolution's Outbox.
+
+  -q, --list       list queued emails in outbox
+      --delete=ID  delete queued email with ID from outbox
+  -t, --add        add email in standard input to outbox (default)
+  -d, --debug      enable debugging messages
+  -n, --dry-run    do not actually modify the outbox
+      --help       show this help and exit
+      --version    output version information and exit
+EOF
+   exit($status);
 }
 
 sub read_data (;*) {
@@ -97,6 +118,62 @@ sub read_evolution_sources () {
 	 close DATA;
       }
    }
+   closedir SOURCES;
+}
+
+sub display_outbox_summary () {
+   my $fmt = "%-16s  %s\n";
+   opendir(OUTBOX, "$outbox/cur") || die "$appName: $outbox/cur: $!\n";
+   for (my $something_done_p;;) {
+      my $dirent = readdir OUTBOX;
+   last unless defined $dirent;
+      my $candidate = "$outbox/cur/$dirent";
+      if (-f $candidate && $dirent =~ /^([^:]+)(?::2,(.*)|$)/) {
+	 my($basename, $flags) = ($1, $2);
+	 my $deleted = $flags =~ /T/;
+	 if (!$deleted) {
+	    if (!$something_done_p) {
+	       printf $fmt, 'Id', 'Queued';
+	       $something_done_p = 1;
+	    }
+	    my $mtime = (stat $candidate)[9];
+	    printf $fmt, $basename, POSIX::strftime('%Y-%m-%d %H:%M:%S', localtime $mtime);
+	 }
+      }
+   }
+   closedir OUTBOX;
+}
+
+sub remove_queued_email () {
+   opendir(OUTBOX, "$outbox/cur") || die "$appName: $outbox/cur: $!\n";
+   for (;;) {
+      my $dirent = readdir OUTBOX;
+   last unless defined $dirent;
+      if (-f "$outbox/cur/$dirent" && $dirent =~ /^([^:]+)(?::2,(.*)|$)/) {
+	 my($basename, $flags) = ($1, $2);
+	 my $deleted = $flags =~ /T/;
+	 if (defined $targets{$basename}) {
+	    if ($deleted) {
+	       printf "$appName: %s: Already in Trash\n", $basename;
+	    } elsif (!$flags) {	# Evolution hasn't seen it yet
+	       my $target = "$outbox/cur/$dirent";
+	       if ($dry_run_p) {
+		  printf "$appName: Pretending to delete %s\n", $target;
+	       } else {
+		  unlink $target || warn "$appName: $target: $!\n";
+	       }
+	    } else {		# Evolution has already seen it
+	       my $target = "$basename:2,T$flags";
+	       if ($dry_run_p) {
+		  printf "$appName: Pretending to rename %s to %s\n", $dirent, $target;
+	       } else {
+		  rename "$outbox/cur/$dirent", "$outbox/cur/$target" || die "$appName: $outbox/cur/$dirent: $!\n";
+	       }
+	    }
+	 }
+      }
+   }
+   closedir OUTBOX;
 }
 
 sub copy_stdin_to_outbox () {
@@ -128,14 +205,25 @@ sub copy_stdin_to_outbox () {
    rename $tmp, $out || die "$appName: $out: Rename to \"$out\" failed\n";
 }
 
+$mode = $1 if $appName =~ /(q|rm)$/;
 GetOptions(
+   'q|list'	=> sub { $mode = 'q'; },
+   'delete=s'	=> sub { $mode = 'rm'; $targets{$_[1]} = 0; },
+   't|add'	=> sub { $mode = undef; },
    'd|debug'	=> \$debug_p,
    'n|dry-run'	=> \$dry_run_p,
+   'help'	=> \&show_usage_then_exit,
    'version'	=> \&show_version_then_exit,
-) || exit(1);
+) || show_usage_then_exit(1);
 
 ($tmp, $out) = ("$id.tmp", "$id.out") if $dry_run_p;
 $ENV{LANG} = 'C';
 
 read_evolution_sources;
-copy_stdin_to_outbox;
+if ($mode eq 'q') {
+   display_outbox_summary;
+} elsif ($mode eq 'rm') {
+   remove_queued_email;
+} else {
+   copy_stdin_to_outbox;
+}
