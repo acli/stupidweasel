@@ -66,6 +66,21 @@ EOF
    exit($status);
 }
 
+sub looks_like_email_address_p {
+   my $it = 1; # assume it's true then disprove it
+   for my $s (@_) {
+      $it = 0 unless $s =~ /^[^\@]+\@[a-z][-0-9a-z]*(?:\.[a-z][-0-9a-z]*)+$/;
+   last unless $it;
+   }
+   return $it;
+}
+for my $test (qw( abc@example.com abc.def@u-example.de abc.def-ghi@ocad.on.ca )) {
+   die "Test case $test failed" unless looks_like_email_address_p $test;
+}
+for my $test (qw( abc@ @u-example.de @ foo )) {
+   die "Test case $test failed" unless !looks_like_email_address_p $test;
+}
+
 sub read_data (;*) {
    my($h) = @_;
    my $it;
@@ -291,8 +306,12 @@ if ($mode eq 'rm') {
       $targets{$arg} = 0;
    }
    @ARGV = ();
-} elsif (!$mode && @ARGV == 1) {
-   $expected_recipient = pop @ARGV;
+} elsif (!$mode) {
+   for my $arg (@ARGV) {
+      die "$appName: $arg: Does not seem to be a valid email address\n" unless looks_like_email_address_p $arg;
+      $expected_recipient = $arg;
+   }
+   @ARGV = ();
 }
 die "$appName: Unknown options @ARGV\n" if @ARGV && $mode ne 'rm';
 
