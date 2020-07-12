@@ -14,7 +14,8 @@ using [standard Maildir procedures](https://cr.yp.to/proto/maildir.html).
 The injected mail will be visible in Evolution as an unsent mail and can be sent by pressing the Send/Receive button
 (sometimes twice).
 
-Note:
+Note about the X-Evolution-Identity header
+----
 Although in theory Evolution knows which address should use which server,
 in practice this knowledge is predetermined at composition time and
 saved in an X-Evolution-Identity header,
