@@ -16,14 +16,17 @@ The injected mail will be visible in Evolution as an unsent mail and can be sent
 
 Note about the X-Evolution-Identity header
 ----
-Although in theory Evolution knows which address should use which server,
-in practice this knowledge is predetermined at composition time and
+Although in theory Evolution knows which server goes with which address,
+in practice this knowledge is predetermined when you write your mail;
+this knowledge is then
 saved in an X-Evolution-Identity header,
 before the mail is saved in Evolution’s Outbox.
 Since we’re forgoing the GUI completely (except for sending),
+this header will be missing.
+This means
 if we don’t generate this header Evolution will actually have *no* knowledge of which account to use.
 In this case it will just pick a *random* account,
-which is probably the wrong account to use.
+most likely a wrong one.
 
 
 How to use it
