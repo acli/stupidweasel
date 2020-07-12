@@ -1,18 +1,25 @@
-This is a stupid sendmail emulator that allows Evolution to be used as some kind of mail transport on a system with no functional sendmail.
+This is a stupid sendmail emulator that allows [Evolution](https://wiki.gnome.org/Apps/Evolution)
+to be used as some kind of a manual mail transport on a system with no functional sendmail.
 Evolution must be correctly configured.
-Mails received by this script will be put into Evolution’s “Outbox”.
+Mails received by this script will be put into Evolution’s local Outbox.
 
 How it works
 ============
 
 The script tries its best to detect the correct Evolution account that corresponds to the email address used.
-This detected identity is placed in an X-Evolution-Identity header.
-If a suitable identity cannot be detected the script will exit with an error.
+This detected identity is placed in an X-Evolution-Identity header and injected in Evolution’s local Outbox
+using standard Maildir procedures.
+(If a suitable identity cannot be detected the script will exit with an error.)
+
+The injected mail will be visible in Evolution as an unsent mail and can be sent by pressing the Send/Receive button.
+(Sometimes the button needs to be pressed twice.)
 
 Note:
 Although in theory Evolution knows which address should use which server,
-in practice this knowledge is saved in the X-Evolution-Identity header before the mail is put in Outbox.
-Since we’re forgoing the GUI completely,
+in practice this knowledge is predetermined at composition time and
+saved in an X-Evolution-Identity header,
+before the mail is saved in Evolution’s Outbox.
+Since we’re forgoing the GUI completely (except for sending),
 if we don’t generate this header Evolution will actually have *no* knowledge of which account to use.
 In this case it will just pick a *random* account,
 which is probably the wrong account to use.
