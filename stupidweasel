@@ -20,7 +20,7 @@ use vars qw( $appName $hostname $id );
 use vars qw( $tmp $out );
 
 use vars qw( $expected_recipient );
-use vars qw( $mode );
+use vars qw( $mode $initial_mode );
 use vars qw( %targets );
 
 $appName = $& if $0 =~ /[^\/]+$/;
@@ -51,14 +51,25 @@ sub show_version_then_exit () {
 
 sub show_usage_then_exit (;$) {
    my($status) = @_;
+   my($default_list, $default_add, $default_rm, $summary);
    my $h = $status? *STDERR: *STDOUT;
+   if ($initial_mode eq 'q') {
+      $summary = "List contents of Evolution's Outbox";
+      $default_list = ' (default)';
+   } elsif ($initial_mode eq 'rm') {
+      $summary = "Removes a piece of email from Evolution's Outbox";
+      $default_rm = ' (default)';
+   } else {
+      $default_add = ' (default)';
+      $summary = "Queue a piece of email into Evolution's Outbox";
+   }
    print $h <<EOF;
 usage: $appName [OPTION] ...
-Queue a piece of email into Evolution's Outbox.
+$summary.
 
-  -q, --list       list queued emails in outbox
-      --delete=ID  delete queued email with ID from outbox
-  -t, --add        add email in standard input to outbox (default)
+  -q, --list       list queued emails in outbox$default_list
+      --delete=ID  delete queued email with ID from outbox$default_rm
+  -t, --add        add email in standard input to outbox$default_add
   -d, --debug      enable debugging messages
   -n, --dry-run    do not actually modify the outbox
   -v, --verbose    use long-form queue listings and show a little more detail
@@ -301,6 +312,7 @@ sub copy_stdin_to_outbox () {
 }
 
 $mode = $1 if $appName =~ /(q|rm)$/;
+$initial_mode = $mode;
 GetOptions(
    'f|force'	=> \$force_delete_p,
    'q|list'	=> sub { $mode = 'q'; },
