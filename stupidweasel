@@ -183,9 +183,9 @@ sub scan_mbox_file ($$$$) {
 }
 
 sub display_outbox_summary () {
-   my $fmt = "%-30s  %-19s  %-9s  %-24s  %s\n";
+   my $fmt = "%-30s  %-19s  %-9s  %-24s%0.0s  %s\n";
    my $n;
-   $fmt = "[%s]\nQueued:\t%s\nBy:\t%s\nFrom:\t%s\nTo:\t%s\n\n" if $verbose_p;
+   $fmt = "[%s]\nQueued:\t%s\nBy:\t%s\nFrom:\t%s <%s>\nTo:\t%s\n\n" if $verbose_p;
    opendir(OUTBOX, "$outbox/cur") || die "$appName: $outbox/cur: $!\n";
    for (my $something_done_p;;) {
       my $dirent = readdir OUTBOX;
@@ -194,6 +194,7 @@ sub display_outbox_summary () {
       if (-f $candidate && $dirent =~ /^([^:]+)(?::2,(.*)|$)/) {
 	 my($basename, $flags) = ($1, $2);
 	 my $deleted = $flags =~ /T/;
+	 my $evolution_identity;
 	 if (!$deleted) {
 	    my($date, $from, $to, $user_agent);
 	    scan_mbox_file($candidate, sub {
@@ -206,11 +207,13 @@ sub display_outbox_summary () {
 			$date = $1;
 		     } elsif ($s =~ /^(?:User-Agent|X-Mailer):\s*(.*?)\s*$/is) {
 			$user_agent = $1;
+		     } elsif ($s =~ /^X-Evolution-Identity:\s*(.*?)\s*$/is) {
+			$evolution_identity = $1;
 		     }
 		  }, sub { return; }, sub { return; });
 
 	    if (!$something_done_p) {
-	       printf $fmt, 'Id', 'Queued', 'By', 'From', 'To' unless $verbose_p;
+	       printf $fmt, 'Id', 'Queued', 'By', 'From', '', 'To' unless $verbose_p;
 	       $something_done_p = 1;
 	    }
 	    if (defined $user_agent && !$verbose_p) {
@@ -220,7 +223,7 @@ sub display_outbox_summary () {
 	       $user_agent =~ s/[\/\s].*//s; # cut out any version information, for brevity
 	    }
 	    my $mtime = (stat $candidate)[9];
-	    printf $fmt, $basename, POSIX::strftime('%Y-%m-%d %H:%M:%S', localtime $mtime), $user_agent, $from, $to;
+	    printf $fmt, $basename, POSIX::strftime('%Y-%m-%d %H:%M:%S', localtime $mtime), $user_agent, $from, $evolution_identity, $to;
 	    $n += 1;
 	 }
       }
