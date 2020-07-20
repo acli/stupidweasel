@@ -184,7 +184,7 @@ sub scan_mbox_file ($$$$) {
 
 sub display_outbox_summary () {
    my $fmt = "%-30s  %-19s  %-9s  %-24s%0.0s  %s\n";
-   my $n;
+   my $n = 0;
    $fmt = "[%s]\nQueued:\t%s\nBy:\t%s\nFrom:\t%s <%s>\nTo:\t%s\n\n" if $verbose_p;
    opendir(OUTBOX, "$outbox/cur") || die "$appName: $outbox/cur: $!\n";
    for (my $something_done_p;;) {
