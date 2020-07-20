@@ -32,6 +32,7 @@ $out = "$outbox/cur/$id:2,";	# see spec on cr.yp.to
 
 use vars qw( $debug_p $dry_run_p );
 use vars qw( $force_delete_p );
+use vars qw( $verbose_p );
 use vars qw( %identity );
 
 $force_delete_p = 1;
@@ -182,6 +183,8 @@ sub scan_mbox_file ($$$$) {
 
 sub display_outbox_summary () {
    my $fmt = "%-30s  %-19s  %-9s  %-24s  %s\n";
+   my $n;
+   $fmt = "[%s]\nQueued:\t%s\nBy:\t%s\nFrom:\t%s\nTo:\t%s\n\n" if $verbose_p;
    opendir(OUTBOX, "$outbox/cur") || die "$appName: $outbox/cur: $!\n";
    for (my $something_done_p;;) {
       my $dirent = readdir OUTBOX;
@@ -206,10 +209,10 @@ sub display_outbox_summary () {
 		  }, sub { return; }, sub { return; });
 
 	    if (!$something_done_p) {
-	       printf $fmt, 'Id', 'Queued', 'By', 'From', 'To';
+	       printf $fmt, 'Id', 'Queued', 'By', 'From', 'To' unless $verbose_p;
 	       $something_done_p = 1;
 	    }
-	    if (defined $user_agent) {
+	    if (defined $user_agent && !$verbose_p) {
 	       $user_agent =~ s/\([^\(\)]*\)//gs;
 	       $user_agent =~ s/ {2,}/ /gs;
 	       $user_agent =~ s/\s*\n/\n/gs;
@@ -217,10 +220,12 @@ sub display_outbox_summary () {
 	    }
 	    my $mtime = (stat $candidate)[9];
 	    printf $fmt, $basename, POSIX::strftime('%Y-%m-%d %H:%M:%S', localtime $mtime), $user_agent, $from, $to;
+	    $n += 1;
 	 }
       }
    }
    closedir OUTBOX;
+   printf "$n mail(s) queued in $outbox\n" if $verbose_p;
 }
 
 sub remove_queued_email () {
@@ -297,6 +302,7 @@ GetOptions(
    't|add'	=> sub { $mode = undef; },
    'd|debug'	=> \$debug_p,
    'n|dry-run'	=> \$dry_run_p,
+   'v|verbose'	=> \$verbose_p,
    'help'	=> \&show_usage_then_exit,
    'version'	=> \&show_version_then_exit,
 ) || show_usage_then_exit(1);
