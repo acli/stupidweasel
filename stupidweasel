@@ -67,11 +67,11 @@ sub show_usage_then_exit (;$) {
 usage: $appName [OPTION] ...
 $summary.
 
-  -q, --list       list queued emails in outbox$default_list
-      --delete=ID  delete queued email with ID from outbox$default_rm
-  -t, --add        add email in standard input to outbox$default_add
   -d, --debug      enable debugging messages
+      --delete=ID  delete queued email with ID from outbox$default_rm
+  -q, --list       list queued emails in outbox$default_list
   -n, --dry-run    do not actually modify the outbox
+  -t, --add        add email in standard input to outbox$default_add
   -v, --verbose    use long-form queue listings and show a little more detail
       --help       show this help and exit
       --version    output version information and exit
