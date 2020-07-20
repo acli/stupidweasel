@@ -69,8 +69,8 @@ $summary.
 
   -d, --debug      enable debugging messages
       --delete=ID  delete queued email with ID from outbox$default_rm
-  -q, --list       list queued emails in outbox$default_list
   -n, --dry-run    do not actually modify the outbox
+  -q, --list       list queued emails in outbox$default_list
   -t, --add        add email in standard input to outbox$default_add
   -v, --verbose    use long-form queue listings and show a little more detail
       --help       show this help and exit
