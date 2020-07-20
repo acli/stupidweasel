@@ -69,8 +69,9 @@ Bugs
 
 Mutt generates a User-Agent header if configured to do so.
 Evolution, on the other hand, generates an X-Mailer header (you have to wonder why!),
-*even if* an existing User-Agent header is present.
-It’s not known whether converting the User-Agent header to X-Mailer header will prevent this or not.
+*even if* an existing User-Agent or X-Mailer header is present.
+(If the mail originally had an X-Mailer header, Evolution will nuke it.)
+There is nothing we can do to prevent Evolution from doing this.
 
 Queue-listing mode assumes each mail goes to only one recipient.
 This is of course wrong.
