@@ -64,6 +64,8 @@ Queue a piece of email into Evolution's Outbox.
   -v, --verbose    use long-form queue listings and show a little more detail
       --help       show this help and exit
       --version    output version information and exit
+
+Report bugs to <https://github.com/acli/stupidweasel/issues>.
 EOF
    exit($status);
 }
