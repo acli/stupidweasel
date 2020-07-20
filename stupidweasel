@@ -61,6 +61,7 @@ Queue a piece of email into Evolution's Outbox.
   -t, --add        add email in standard input to outbox (default)
   -d, --debug      enable debugging messages
   -n, --dry-run    do not actually modify the outbox
+  -v, --verbose    use long-form queue listings and show a little more detail
       --help       show this help and exit
       --version    output version information and exit
 EOF
