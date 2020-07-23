@@ -22,6 +22,7 @@ use vars qw( $tmp $out );
 
 use vars qw( $expected_recipient );
 use vars qw( $mode $initial_mode );
+use vars qw( %dsn_option );
 use vars qw( %targets );
 use vars qw( $status );
 
@@ -72,6 +73,7 @@ $summary.
 
   -d, --debug      enable debugging messages
       --delete=ID  delete queued email with ID from outbox$default_rm
+  -N, --dsn=WORD   ignored for compatibility
   -n, --dry-run    do not actually modify the outbox
   -q, --list       list queued emails in outbox$default_list
   -t, --add        add email in standard input to outbox$default_add
@@ -82,6 +84,22 @@ $summary.
 Report bugs to <https://github.com/acli/stupidweasel/issues>.
 EOF
    exit($status);
+}
+
+sub set_dsn_options ($) {
+   my($s) = @_;
+   # FIXME: We make sure the value is sendmail-compatible, but we don't actually act on it
+   if ($s eq 'never') {
+      %dsn_option = ();
+   } else {
+      for my $option (split(/,/, $s)) {
+	 if ($option =~ /^(?:failure|delay|success)$/) {
+	    $dsn_option{$1} = 1;
+	 } else {
+	    die "$appName: Argument to -N can only be either \"never\", or a comma-separated list of \"failure\", \"delay\", \"success\"\n";
+	 }
+      }
+   }
 }
 
 sub looks_like_email_address_p {
@@ -361,6 +379,7 @@ GetOptions(
    'delete=s'	=> sub { $mode = 'rm'; $targets{$_[1]} = 0; },
    't|add'	=> sub { $mode = undef; },
    'd|debug'	=> \$debug_p,
+   'N|dsn=s'	=> sub { set_dsn_options($_[1]); },
    'n|dry-run'	=> \$dry_run_p,
    'v|verbose'	=> \$verbose_p,
    'help'	=> \&show_usage_then_exit,
