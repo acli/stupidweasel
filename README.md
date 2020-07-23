@@ -1,4 +1,4 @@
-**stupidweasel – a stupid script to weasel your mails out, by way of Evolution**
+**stupidweasel – a stupid hack to weasel your mails out into the real world, by way of Evolution**
 
 This is a stupid sendmail emulator that allows [Evolution](https://wiki.gnome.org/Apps/Evolution)
 to be used as some kind of a manual mail transport on a system with no functional sendmail.
