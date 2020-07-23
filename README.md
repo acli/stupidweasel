@@ -57,11 +57,11 @@ you can create a .signature file with only this directive:
     (*$insert_signature_here*)
 
 The script will replace this directive with the correct Evolution signature.
-The script currently assumes that any file that has the execute bit set is a signature script,
-so make sure your plain-text signatures do not have the execute bit set.
+Make sure your plain-text signatures do not have the execute bit set;
+the script assumes that any file with the execute bit set is a signature script.
 
 
-Listing the contents of the send queue
+Listing the contents of the Outbox
 -------------------
 
 If you want to see what is in Evolution’s Outbox,
@@ -69,12 +69,12 @@ you can use the command
 
     stupidweasel --list
 
-Or, if you have created symlinks, you can use your “q” symlink. In the example, you could save a lot of keystrokes by typing
+Or, if you have created symlinks, you can use your “q” symlink. In the example, you could save keystrokes by typing
 
     mailq
 
-Note that the Outbox also contains mails that have been queued using Evolution’s offline mode.
-The listing will make it clear which mails have been put into the Outbox by Evolution itself.
+Evolution’s Outbox also contains mails that have been queued using Evolution’s own offline mode.
+The listing you get will make it clear which mails have been put into the Outbox by Evolution itself.
 
 You can show a more detailed version of the listing by including the `-v` (or `--verbose`) option.
 In the example installation, that would be
@@ -82,7 +82,7 @@ In the example installation, that would be
     mailq -v
 
 
-Deleting mails from the send queue
+Deleting mails from the Outbox
 -------------------
 
 If you want to delete a piece of mail from the Outbox,
@@ -90,7 +90,7 @@ you can use the command
 
     stupidweasel --delete *ID_NUMBER_OF_MAIL_TO_DELETE*
 
-Or, if you have created symlinks, you can use your “q” symlink. In the example, you could save a lot of keystrokes by typing
+Or, if you have created symlinks, you can use your “q” symlink. In the example, you could save keystrokes by typing
 
     mailrm *ID_NUMBER_OF_MAIL_TO_DELETE*
 
