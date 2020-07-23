@@ -23,6 +23,7 @@ use vars qw( $tmp $out );
 use vars qw( $expected_recipient );
 use vars qw( $mode $initial_mode );
 use vars qw( %targets );
+use vars qw( $status );
 
 $appName = $& if $0 =~ /[^\/]+$/;
 $hostname = `hostname`; chomp $hostname;
@@ -41,7 +42,7 @@ $force_delete_p = 1;
 
 $SIG{__DIE__} = sub {
    if (-f $tmp) {
-      print STDERR "$appName: Removing temporary file $tmp\n";
+      print STDERR "$appName: Removing temporary file $tmp\n" if $debug_p;
       unlink $tmp;
    }
 };
@@ -268,9 +269,10 @@ sub remove_queued_email () {
 	       if ($dry_run_p) {
 		  print "$appName: Pretending to delete $target\n";
 	       } elsif (unlink $target) {
-		  printf "$basename permanently removed from $outbox\n" if $verbose_p;
+		  printf "$basename permanently deleted from $outbox\n" if $verbose_p;
 	       } else {
-		  warn "$appName: $target: $!\n";
+		  warn "$appName: Could not delete $basename: $!\n";
+		  $status = 1;
 	       }
 	    } else {		# Evolution has already seen it
 	       my $target = "$basename:2,T$flags";
@@ -279,7 +281,8 @@ sub remove_queued_email () {
 	       } elsif (rename "$outbox/cur/$dirent", "$outbox/cur/$target") {
 		  printf "$basename marked as Trashed\n" if $verbose_p;
 	       } else {
-		  die "$appName: $outbox/cur/$dirent: $!\n";
+		  warn "$appName: Could not mark $basename as Trashed: $!\n";
+		  $status = 1;
 	       }
 	    }
 	    delete $targets{$basename};
@@ -287,7 +290,8 @@ sub remove_queued_email () {
       }
    }
    for my $orphan (sort keys %targets) {
-      print "$appName: $orphan: Not found in Outbox\n";
+      warn "$appName: $orphan: Not found in Outbox\n";
+      $status = 1;
    }
    closedir OUTBOX;
 }
@@ -388,3 +392,4 @@ if ($mode eq 'q') {
 } else {
    copy_stdin_to_outbox;
 }
+exit $status;
