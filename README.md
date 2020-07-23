@@ -42,6 +42,14 @@ In this mode, the script will analyze the mail that it receives from standard in
 if a suitable Evolution identity is found,
 the mail will be injected into Evolution’s Outbox.
 
+If you want to use signatures, you can create a .signature file with only the directive
+
+    (*$insert_signature_here*)
+
+The script will replace this directive with the correct Evolution signature.
+However, the script currently assumes that any file that has the execute bit set is a signature script,
+so make sure your plain-text signatures do not have the execute bit set.
+
 To actually send the mail, you must manually press the Send/Receive button in Evolution.
 
 List queue contents

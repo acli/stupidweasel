@@ -9,9 +9,10 @@ use integer;
 use Getopt::Long qw(:config no_auto_abbrev bundling);
 use POSIX;
 
-use vars qw( $outbox $sources );
+use vars qw( $outbox $sources $signatures );
 $outbox = "$ENV{HOME}/.local/share/evolution/mail/local/.Outbox";
 $sources = "$ENV{HOME}/.config/evolution/sources";
+$signatures = "$ENV{HOME}/.config/evolution/signatures";
 
 use vars qw( $mtaid );
 $mtaid = 'stupidweasel';
@@ -34,6 +35,7 @@ use vars qw( $debug_p $dry_run_p );
 use vars qw( $force_delete_p );
 use vars qw( $verbose_p );
 use vars qw( %identity );
+use vars qw( %signature );
 
 $force_delete_p = 1;
 
@@ -140,13 +142,18 @@ sub read_evolution_sources () {
 	 open(DATA, '<', "$sources/$dirent") || die "$appName: $sources/$dirent: $!\n";
 	 my $data = read_data DATA;
 	 my $mail_account = $data->{'Mail Account'};
+	 my $mail_identity = $data->{'Mail Identity'};
 	 my $authentication = $data->{'Authentication'};
 	 if (defined $mail_account && defined $authentication) {
 	    my $uid = get_scalar('IdentityUid', $mail_account);
 	    my $email = get_scalar('User', $authentication);
+	    my $signature = get_scalar('SignatureUid', $mail_identity);
 	    if (defined $uid && defined $email) {
-	       print STDERR "$appName: $dirent: Detected email ($email) with X-Evolution-Identity ($uid)\n" if $debug_p;
+	       printf STDERR "%s: %s: Detected email (%s) with X-Evolution-Identity (%s)%s\n",
+		     $appName, $dirent, $email, $uid, ($signature? " with signature ($signature)": '') if $debug_p;
+
 	       $identity{+lc $email} = $uid;
+	       $signature{+lc $email} = $signature;
 	    }
 	 }
 	 close DATA;
@@ -281,6 +288,29 @@ sub remove_queued_email () {
    closedir OUTBOX;
 }
 
+sub copy_signature_to (*$$) {
+   my($h, $from, $uid) = @_;
+   my $signature = $signature{+lc $from};
+   if ($signature) {
+      $signature = "$signatures/$signature";
+      while (-l $signature) {
+	 $signature = readlink $signature;
+      }
+      if (-f $signature) {
+	 open(SIGNATURE, (-x $signature? '-|': '<'), $signature) || warn "$signature: $!\n";
+	 my $newline_needed_p;
+	 for (;;) {
+	    my $s = scalar <SIGNATURE>;
+	 last unless defined $s;
+	    print $h $s;
+	    $newline_needed_p = 1 unless $s =~ /\n$/s;
+	 }
+	 close SIGNATURE;
+	 print $h "\n" if $newline_needed_p;
+      }
+   }
+}
+
 sub copy_stdin_to_outbox () {
    open(OUTPUT, '>', $tmp) || die "$appName: $tmp: $!\n";
    printf OUTPUT "Received: (from %d\@localhost) by %s (%s) id <%s>; %s\n",
@@ -304,7 +334,11 @@ sub copy_stdin_to_outbox () {
 	    print OUTPUT $s;
 	 }, sub {
 	    my($s, $filename, $lineno) = @_;
-	    print OUTPUT $s;
+	    if ($s =~ /^\s*\(\*\$insert_signature_here\*\)\s*\n/s) {
+	       copy_signature_to OUTPUT, $from, $uid;
+	    } else {
+	       print OUTPUT $s;
+	    }
 	 });
    close OUTPUT;
    print STDERR "$appName: Moving ($tmp) -> ($out)\n" if $debug_p;
