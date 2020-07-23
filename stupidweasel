@@ -267,15 +267,19 @@ sub remove_queued_email () {
 	       my $target = "$outbox/cur/$dirent";
 	       if ($dry_run_p) {
 		  print "$appName: Pretending to delete $target\n";
+	       } elsif (unlink $target) {
+		  printf "$basename permanently removed from $outbox\n" if $verbose_p;
 	       } else {
-		  unlink $target || warn "$appName: $target: $!\n";
+		  warn "$appName: $target: $!\n";
 	       }
 	    } else {		# Evolution has already seen it
 	       my $target = "$basename:2,T$flags";
 	       if ($dry_run_p) {
 		  print "$appName: Pretending to rename $dirent to $target\n";
+	       } elsif (rename "$outbox/cur/$dirent", "$outbox/cur/$target") {
+		  printf "$basename marked as Trashed\n" if $verbose_p;
 	       } else {
-		  rename "$outbox/cur/$dirent", "$outbox/cur/$target" || die "$appName: $outbox/cur/$dirent: $!\n";
+		  die "$appName: $outbox/cur/$dirent: $!\n";
 	       }
 	    }
 	    delete $targets{$basename};
