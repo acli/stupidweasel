@@ -1,4 +1,4 @@
-**stupidweasel – a stupid hack to weasel your mails out into the real world, by way of Evolution**
+**stupidweasel – a stupid hack to weasel your mails out into the real world
 
 This is a stupid sendmail emulator that allows [Evolution](https://wiki.gnome.org/Apps/Evolution)
 to be used as some kind of a manual mail transport on a system with no functional sendmail.
@@ -13,7 +13,7 @@ Installing it
 
 Running `make install` will install _stupidweasel_ in `$HOME/bin`.
 It is also okay to install it as a shared binary (in `/usr/local/bin`, maybe);
-the script does not rely on where it is installed since Evolution configurations files
+the script does not rely on where it is installed since Evolution configuration files
 are always in predictable locations in your home directory.
 You don’t need to keep the name _stupidweasel_,
 but the name you choose should not end in `q` or `rm`.
