@@ -75,6 +75,7 @@ Or, if you have created symlinks, you can use your “q” symlink. In the examp
     mailq
 
 Note that the Outbox also contains mails that have been queued using Evolution’s offline mode.
+The listing will make it clear which mails have been put into the Outbox by Evolution itself.
 
 You can show a more detailed version of the listing by including the `-v` (or `--verbose`) option.
 In the example installation, that would be
