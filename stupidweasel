@@ -2,6 +2,7 @@
 # vi: set sw=3 ai sm:
 #
 # Stupid hack to use Evolution as a mail transport so that we can use mutt if necessary
+# Copyright ©2020 by Ambrose Li <ambrose.li@gmail.com>
 
 use strict;
 use integer;
@@ -35,6 +36,7 @@ $out = "$outbox/cur/$id:2,";	# see spec on cr.yp.to
 
 use vars qw( $debug_p $dry_run_p );
 use vars qw( $force_delete_p );
+use vars qw( $interactive_p );
 use vars qw( $verbose_p );
 use vars qw( %identity );
 use vars qw( %signature );
@@ -71,15 +73,16 @@ sub show_usage_then_exit (;$) {
 usage: $appName [OPTION] ...
 $summary.
 
-  -d, --debug      enable debugging messages
-      --delete=ID  delete queued email with ID from outbox$default_rm
-  -N, --dsn=WORD   ignored for compatibility
-  -n, --dry-run    do not actually modify the outbox
-  -q, --list       list queued emails in outbox$default_list
-  -t, --add        add email in standard input to outbox$default_add
-  -v, --verbose    use long-form queue listings and show a little more detail
-      --help       show this help and exit
-      --version    output version information and exit
+  -d, --debug        enable debugging messages
+      --delete=ID    delete queued email with ID from outbox$default_rm
+  -i, --interactive  prompt before every removal
+  -N, --dsn=WORD     ignored for compatibility
+  -n, --dry-run      do not actually modify the outbox
+  -q, --list         list queued emails in outbox$default_list
+  -t, --add          add email in standard input to outbox$default_add
+  -v, --verbose      use long-form queue listings and show a little more detail
+      --help         show this help and exit
+      --version      output version information and exit
 
 Report bugs to <https://github.com/acli/stupidweasel/issues>.
 EOF
@@ -221,6 +224,15 @@ sub scan_mbox_file ($$$$) {
    close MBOX;
 }
 
+sub user_interactively_confirms (;$) {
+   my($prompt) = @_;
+   $prompt = 'Remove?' unless defined $prompt;
+   printf STDERR "%s: %s ", $appName, $prompt;
+   flush STDERR;
+   my $s = scalar <STDIN>;
+   return defined $s && $s =~ /^\s*(?:y|yes)/i;
+}
+
 sub display_outbox_summary () {
    my $fmt = "%-30s  %-19s  %-9s  %-24s%0.0s  %s\n";
    my $n = 0;
@@ -272,6 +284,7 @@ sub display_outbox_summary () {
 }
 
 sub remove_queued_email () {
+   my $remove_all_p = (keys %targets == 1 && defined $targets{'-'});
    opendir(OUTBOX, "$outbox/cur") || die "$appName: $outbox/cur: $!\n";
    for (;;) {
       my $dirent = readdir OUTBOX;
@@ -279,8 +292,10 @@ sub remove_queued_email () {
       if (-f "$outbox/cur/$dirent" && $dirent =~ /^([^:]+)(?::2,(.*)|$)/) {
 	 my($basename, $flags) = ($1, $2);
 	 my $deleted = $flags =~ /T/;
-	 if (defined $targets{$basename}) {
-	    if ($deleted) {
+	 if ($remove_all_p || defined $targets{$basename}) {
+	    if ($interactive_p && !user_interactively_confirms("Remove ‘$basename’?")) {
+	       ;
+	    } elsif ($deleted) {
 	       print "$appName: $basename: Already in Trash\n";
 	    } elsif (!$flags || $force_delete_p) {	# Evolution hasn't seen it yet, or -f used
 	       my $target = "$outbox/cur/$dirent";
@@ -307,9 +322,11 @@ sub remove_queued_email () {
 	 }
       }
    }
-   for my $orphan (sort keys %targets) {
-      warn "$appName: $orphan: Not found in Outbox\n";
-      $status = 1;
+   if (!$remove_all_p) {
+      for my $orphan (sort keys %targets) {
+	 warn "$appName: $orphan: Not found in Outbox\n";
+	 $status = 1;
+      }
    }
    closedir OUTBOX;
 }
@@ -322,8 +339,9 @@ sub copy_signature_to (*$$) {
       while (-l $signature) {
 	 $signature = readlink $signature;
       }
+      print STDERR "$appName: Signature for $from <$uid> resolves to ($signature)\n" if $debug_p;
       if (-f $signature) {
-	 open(SIGNATURE, (-x $signature? '-|': '<'), $signature) || warn "$signature: $!\n";
+	 open(SIGNATURE, (-x $signature? '-|': '<'), $signature) || die "$appName: Could not open signature for $from <$uid>: $!\n";
 	 my $newline_needed_p;
 	 for (;;) {
 	    my $s = scalar <SIGNATURE>;
@@ -333,6 +351,8 @@ sub copy_signature_to (*$$) {
 	 }
 	 close SIGNATURE;
 	 print $h "\n" if $newline_needed_p;
+      } else {
+	 die "$appName: Signature for $from <$uid> did not resolve to an existing file\n";
       }
    }
 }
@@ -374,16 +394,17 @@ sub copy_stdin_to_outbox () {
 $mode = $1 if $appName =~ /(q|rm)$/;
 $initial_mode = $mode;
 GetOptions(
-   'f|force'	=> \$force_delete_p,
-   'q|list'	=> sub { $mode = 'q'; },
-   'delete=s'	=> sub { $mode = 'rm'; $targets{$_[1]} = 0; },
-   't|add'	=> sub { $mode = undef; },
-   'd|debug'	=> \$debug_p,
-   'N|dsn=s'	=> sub { set_dsn_options($_[1]); },
-   'n|dry-run'	=> \$dry_run_p,
-   'v|verbose'	=> \$verbose_p,
-   'help'	=> \&show_usage_then_exit,
-   'version'	=> \&show_version_then_exit,
+   'f|force'		=> \$force_delete_p,
+   'q|list'		=> sub { $mode = 'q'; },
+   'delete=s'		=> sub { $mode = 'rm'; $targets{$_[1]} = 0; },
+   't|add'		=> sub { $mode = undef; },
+   'd|debug'		=> \$debug_p,
+   'i|interactive'	=> \$interactive_p,
+   'N|dsn=s'		=> sub { set_dsn_options($_[1]); },
+   'n|dry-run'		=> \$dry_run_p,
+   'v|verbose'		=> \$verbose_p,
+   'help'		=> \&show_usage_then_exit,
+   'version'		=> \&show_version_then_exit,
 ) || show_usage_then_exit(1);
 
 if ($mode eq 'rm') {
