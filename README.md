@@ -41,7 +41,7 @@ In _mutt_, assuming your home directory is `/home/alice`, you would put the foll
 
     set sendmail=/home/alice/bin/stupidweasel
 
-The script does not currently support _sendmail_’s `-N` option.
+Currently, _sendmail_’s `-N` option is recognized but ignored.
 
 
 Sending mails from a text client
