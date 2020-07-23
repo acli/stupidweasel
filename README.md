@@ -3,6 +3,104 @@ to be used as some kind of a manual mail transport on a system with no functiona
 Evolution must be correctly configured.
 Mails received by this script will be put into Evolution’s local Outbox.
 
+How to use it
+=============
+
+Installing it
+-------
+
+Running `make install` will install _stupidweasel_ in `$HOME/bin`.
+It is also okay to install it as a shared binary (in `/usr/local/bin`, maybe);
+the script does not rely on where it is installed since Evolution configurations files
+are always in predictable locations in your home directory.
+You don’t need to keep the name _stupidweasel_,
+but the name you choose should not end in `q` or `rm`.
+
+After installation, it is convenient to create a symbolic link that ends in `q`
+and another that ends in `rm`.
+For example, if you want to use the _Zmailer_-compatible aliases _mailq_ and _mailrm_,
+you could do
+
+    make install
+    cd ~/bin
+    ln -s stupidweasel mailq
+    ln -s stupidweasel mailrm
+
+It’s not necessary to create these symbolic links, but having them will be more convenient.
+In the above example, running `mailq` would be the same as running `stupidweasel --list`;
+running `mailrm` would be the same as running `stupidweasel --delete`.
+
+
+Configuring your text client
+----------------------------
+
+Before you can send mail through your favourite text client,
+you will need to configure it so it knows where to find your “sendmail”.
+In _mutt_, assuming your home directory is `/home/alice`, you would put the following in your .muttrc:
+
+    set sendmail=/home/alice/bin/stupidweasel
+
+The script does not currently support _sendmail_’s `-N` option.
+
+
+Sending mails from a text client
+-------
+
+If you have installed and configured everything correctly, you should be able to use your text client normally;
+the only difference is that to actually send any mail,
+you must manually press the Send/Receive button in Evolution.
+
+If you want to include a signature but you have multiple Evolutuion identities with multiple signatures,
+you can create a .signature file with only this directive:
+
+    (*$insert_signature_here*)
+
+The script will replace this directive with the correct Evolution signature.
+The script currently assumes that any file that has the execute bit set is a signature script,
+so make sure your plain-text signatures do not have the execute bit set.
+
+
+Listing the contents of the send queue
+-------------------
+
+If you want to see what is in Evolution’s Outbox,
+you can use the command
+
+    stupidweasel --list
+
+Or, if you have created symlinks, you can use your “q” symlink. In the example show, you could save a lot of keystrokes by typing
+
+    mailq
+
+Note that the Outbox also contains mails that have been queued using Evolution’s offline mode.
+
+You can show a more detailed version of the listing by including the `-v` (or `--verbose`) option.
+In the example installation, that would be
+
+    mailq -v
+
+
+Deleting mails from the send queue
+-------------------
+
+If you want to delete a piece of mail from the Outbox,
+you can use the command
+
+    stupidweasel --delete *ID_NUMBER_OF_MAIL_TO_DELETE*
+
+Or, if you have created symlinks, you can use your “q” symlink. In the example show, you could save a lot of keystrokes by typing
+
+    mailrm *ID_NUMBER_OF_MAIL_TO_DELETE*
+
+You need to know the ID number of what you want to delete.
+To get this number you use the `stupidweasel --list` command (or, in the example, `mailq`).
+
+You can make the script give you confirmation after deleting mail by including the `-v` (or `--verbose`) option.
+In the example installation, that could be something like
+
+    mailrm -v 1595494621.549.somehost
+
+
 How it works
 ============
 
@@ -27,49 +125,6 @@ This means
 if we don’t generate this header Evolution will actually have *no* knowledge of which account to use.
 In this case it will just pick a *random* account,
 most likely a wrong one.
-
-
-How to use it
-=============
-
-Sending
--------
-
-In .muttrc, set `sendmail` to the full path of where you installed this script.
-The script must not be installed with a name that ends in *q* or *rm*.
-
-In this mode, the script will analyze the mail that it receives from standard input;
-if a suitable Evolution identity is found,
-the mail will be injected into Evolution’s Outbox.
-
-If you want to use signatures, you can create a .signature file with only the directive
-
-    (*$insert_signature_here*)
-
-The script will replace this directive with the correct Evolution signature.
-However, the script currently assumes that any file that has the execute bit set is a signature script,
-so make sure your plain-text signatures do not have the execute bit set.
-
-To actually send the mail, you must manually press the Send/Receive button in Evolution.
-
-Listing the contents of the send queue
--------------------
-
-Running the script with either the `-q` or `--list` option will show you a listing of the contents of the Evolution Outbox.
-Note that the Outbox also contains mails that have been queued using Evolution’s offline mode.
-
-If the script is installed or symlinked to a name that ends in *q* (such as *mailq*),
-the script will run in list mode by default.
-
-Deleting mails from the send queue
--------------------
-
-Running the script with the `--delete` option,
-followed by one or more mail ID’s will cause the specified mails to be deleted from Outbox.
-You can get a list of ID’s by running the script in list mode.
-
-If the script is installed or symlinked to a name that ends in *rm* (such as *mailrm*),
-the script will run in delete mode by default.
 
 
 Bugs
