@@ -163,18 +163,22 @@ sub read_evolution_sources () {
       if ($dirent =~ /\.source$/) {
 	 open(DATA, '<', "$sources/$dirent") || die "$appName: $sources/$dirent: $!\n";
 	 my $data = read_data DATA;
+	 my $data_source = $data->{'Data Source'};
 	 my $mail_account = $data->{'Mail Account'};
 	 my $mail_identity = $data->{'Mail Identity'};
 	 my $authentication = $data->{'Authentication'};
 	 if (defined $mail_account && defined $authentication) {
 	    my $uid = get_scalar('IdentityUid', $mail_account);
 	    my $email = get_scalar('User', $authentication);
-	    my $signature = get_scalar('SignatureUid', $mail_identity);
 	    if (defined $uid && defined $email) {
-	       printf STDERR "%s: %s: Detected email (%s) with X-Evolution-Identity (%s)%s\n",
-		     $appName, $dirent, $email, $uid, ($signature? " with signature ($signature)": '') if $debug_p;
-
+	       printf STDERR "%s: %s: Detected email (%s) with X-Evolution-Identity (%s)\n", $appName, $dirent, $email, $uid if $debug_p;
 	       $identity{+lc $email} = $uid;
+	    }
+	 } elsif (defined $mail_identity) {
+	    my $email = get_scalar('Address', $mail_identity);
+	    my $signature = get_scalar('SignatureUid', $mail_identity);
+	    if (defined $email && defined $signature) {
+	       printf STDERR "%s: %s: Detected email (%s) with signature (%s)\n", $appName, $dirent, $email, $signature if $debug_p;
 	       $signature{+lc $email} = $signature;
 	    }
 	 }
@@ -341,12 +345,13 @@ sub copy_signature_to (*$$) {
       }
       print STDERR "$appName: Signature for $from <$uid> resolves to ($signature)\n" if $debug_p;
       if (-f $signature) {
-	 open(SIGNATURE, (-x $signature? '-|': '<'), $signature) || die "$appName: Could not open signature for $from <$uid>: $!\n";
+	 my $st = open(SIGNATURE, (-x $signature? '-|': '<'), $signature) || die "$appName: Could not open signature for $from <$uid>: $!\n";
 	 my $newline_needed_p;
+	 print STDERR "$appName: pipe to $signature opened, pid is $st" if $debug_p && -x $signature;
 	 for (;;) {
 	    my $s = scalar <SIGNATURE>;
 	 last unless defined $s;
-	    print $h $s;
+	    $h->print($s);
 	    $newline_needed_p = 1 unless $s =~ /\n$/s;
 	 }
 	 close SIGNATURE;
@@ -354,6 +359,8 @@ sub copy_signature_to (*$$) {
       } else {
 	 die "$appName: Signature for $from <$uid> did not resolve to an existing file\n";
       }
+   } else {
+      print STDERR "$appName: No signature found for $from <$uid>\n" if $debug_p;
    }
 }
 
