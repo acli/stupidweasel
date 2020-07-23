@@ -69,7 +69,7 @@ you can use the command
 
     stupidweasel --list
 
-Or, if you have created symlinks, you can use your “q” symlink. In the example show, you could save a lot of keystrokes by typing
+Or, if you have created symlinks, you can use your “q” symlink. In the example, you could save a lot of keystrokes by typing
 
     mailq
 
@@ -90,7 +90,7 @@ you can use the command
 
     stupidweasel --delete *ID_NUMBER_OF_MAIL_TO_DELETE*
 
-Or, if you have created symlinks, you can use your “q” symlink. In the example show, you could save a lot of keystrokes by typing
+Or, if you have created symlinks, you can use your “q” symlink. In the example, you could save a lot of keystrokes by typing
 
     mailrm *ID_NUMBER_OF_MAIL_TO_DELETE*
 
