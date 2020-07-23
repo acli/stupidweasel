@@ -1,4 +1,4 @@
-**stupidweasel – a stupid hack to weasel your mails out into the real world
+**stupidweasel – a stupid hack to weasel your mails out into the real world**
 
 This is a stupid sendmail emulator that allows [Evolution](https://wiki.gnome.org/Apps/Evolution)
 to be used as some kind of a manual mail transport on a system with no functional sendmail.
@@ -12,23 +12,22 @@ Installing it
 -------
 
 Running `make install` will install _stupidweasel_ in `$HOME/bin`.
-It is also okay to install it as a shared binary (in `/usr/local/bin`, maybe);
+It is also okay to install it as a shared binary (in /usr/local/bin, maybe);
 the script does not rely on where it is installed since Evolution configuration files
 are always in predictable locations in your home directory.
 You don’t need to keep the name _stupidweasel_,
-but the name you choose should not end in `q` or `rm`.
+but the name you choose should not end in _q_ or _rm_.
 
-After installation, it is convenient to create a symbolic link that ends in `q`
-and another that ends in `rm`.
-For example, if you want to use the _Zmailer_-compatible aliases _mailq_ and _mailrm_,
-you could do
+After installation, it is convenient to create a symbolic link that ends in _q_
+and another that ends in _rm_.
+For example, if you are used to _Zmailer_ you might want the aliases _mailq_ and _mailrm_:
 
     make install
     cd ~/bin
     ln -s stupidweasel mailq
     ln -s stupidweasel mailrm
 
-It’s not necessary to create these symbolic links, but having them will be more convenient.
+It’s not necessary to create these symbolic links, but having them will make things more convenient.
 In the above example, running `mailq` would be the same as running `stupidweasel --list`;
 running `mailrm` would be the same as running `stupidweasel --delete`.
 
