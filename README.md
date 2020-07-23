@@ -52,7 +52,7 @@ so make sure your plain-text signatures do not have the execute bit set.
 
 To actually send the mail, you must manually press the Send/Receive button in Evolution.
 
-List queue contents
+Listing the contents of the send queue
 -------------------
 
 Running the script with either the `-q` or `--list` option will show you a listing of the contents of the Evolution Outbox.
@@ -61,7 +61,7 @@ Note that the Outbox also contains mails that have been queued using Evolutionâ€
 If the script is installed or symlinked to a name that ends in *q* (such as *mailq*),
 the script will run in list mode by default.
 
-Delete queued mail
+Deleting mails from the send queue
 -------------------
 
 Running the script with the `--delete` option,
