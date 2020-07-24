@@ -69,7 +69,7 @@ B<stupidweasel> B<--version>
 F<stupidweasel> is a small Perl script intended as a drop-in replacement for L<sendmail(8)>
 on systems having no functional B<sendmail>
 but a working installation of Evolution.
-Its sole purpose is to allow the use of text-mode email clients such as L<mutt(1)>,
+Its sole purpose is to allow you to use of text-mode email clients such as L<mutt(1)>,
 and it does this by putting any mail it receives in Evolution’s Outbox
 after adding a header to let Evolution know which server to use for sending.
 
@@ -564,6 +564,22 @@ if ($mode eq 'q') {
    copy_stdin_to_outbox;
 }
 exit $status;
+
+=head1 See also
+
+L<evolution(1)>,
+L<muttrc(5)>
+
+L<Novell, Inc.
+I<Novell Evolution 2.4 User Guide>.
+Waltham, MA: Novell, 2005.|https://www.novell.com/documentation/evolution24/pdfdoc/evolution24/evolution24.pdf>.
+
+L<The Dovecot Wiki; “Maildir”.
+Last updated May 11, 2017.|https://wiki2.dovecot.org/MailboxFormat/Maildir>.
+
+L<Bernstein, D. J.
+“Using maildir format”.
+n.d.|https://cr.yp.to/proto/maildir.html>.
 
 =head1 Reporting bugs
 

@@ -16,7 +16,7 @@ $(bindir)/%: %
 	perl -cw $<
 
 %.8: %
-	pod2man --utf8 --section 8 $< > $@
+	perl -nle 'print /^(=head1)(.*)/s? "$$1\U$$2": $$_' $< | pod2man --utf8 --section 8 -n "$(shell echo "$*"|tr '[:lower:]' '[:upper:]')" > $@
 
 .DELETE_ON_ERROR:
 .PHONEY: all check doc install
