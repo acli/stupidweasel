@@ -342,6 +342,8 @@ sub scan_mbox_file ($$$$) {
 	 } elsif ($s =~ /^\s/s) {
 	    die "$filename: $.: Illegal continuation header\n" unless @headers;
 	    $headers[$#headers]->[0] .= $s;
+	 } elsif ($s !~ /:/s) {
+	    die "$filename: $.: Malformed header, no colon\n";
 	 } else {
 	    push @headers, [$s, $.];
 	 }
