@@ -160,6 +160,8 @@ F<stupidweasel> accepts a B<sendmail>-compatible B<-N> option
 (which means it must be followed by either the world B<never>,
 or a comma-separate list of words where each word is either B<failure>, B<delay>, or B<success>),
 but the option is currently ignored.
+We have no control over the actual SMTP handshake that Evolution will perform
+so we have no influence over delivery status notifications.
 =cut
 
 sub set_dsn_options ($) {

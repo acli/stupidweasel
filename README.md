@@ -41,7 +41,8 @@ In _mutt_, assuming your home directory is `/home/alice`, you would put the foll
 
     set sendmail=/home/alice/bin/stupidweasel
 
-Currently, _sendmail_’s `-N` option is recognized but ignored.
+_sendmail_’s `-N` option is recognized but silently ignored;
+we have no control over the actual SMTP handshake so no influence over delivery status notifications.
 
 
 Sending mails from a text client
