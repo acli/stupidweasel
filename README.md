@@ -88,11 +88,11 @@ Deleting mails from the Outbox
 If you want to delete a piece of mail from the Outbox,
 you can use the command
 
-    stupidweasel --delete *ID_NUMBER_OF_MAIL_TO_DELETE*
+    stupidweasel --delete ID_NUMBER_OF_MAIL_TO_DELETE
 
 Or, if you have created symlinks, you can use your “q” symlink. In the example, you could save keystrokes by typing
 
-    mailrm *ID_NUMBER_OF_MAIL_TO_DELETE*
+    mailrm ID_NUMBER_OF_MAIL_TO_DELETE
 
 You need to know the ID number of what you want to delete.
 To get this number you use the `stupidweasel --list` command (or, in the example, `mailq`).
