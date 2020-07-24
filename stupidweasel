@@ -171,7 +171,7 @@ sub set_dsn_options ($) {
       %dsn_option = ();
    } else {
       for my $option (split(/,/, $s)) {
-	 if ($option =~ /^(?:failure|delay|success)$/) {
+	 if ($option =~ /^(failure|delay|success)$/) {
 	    $dsn_option{$1} = 1;
 	 } else {
 	    die "$appName: Argument to -N can only be either \"never\", or a comma-separated list of \"failure\", \"delay\", \"success\"\n";
@@ -496,6 +496,7 @@ sub copy_stdin_to_outbox () {
 	 $<, $hostname, $mtaid, $id,
 	 POSIX::strftime('%a, %e %b %Y %H:%M:%S %z', localtime time);
 
+   warn "$appName: -N option ignored because we have no control over DSN\n" if ($verbose_p || $debug_p) && (join(',', sort keys %dsn_option) ne 'delay,failure');
    my($from, $uid);
    scan_mbox_file('-', sub {
 	    my($s, $filename, $lineno) = @_;
