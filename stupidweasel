@@ -498,6 +498,7 @@ sub copy_stdin_to_outbox () {
 
    warn "$appName: -N option ignored because we have no control over DSN\n" if ($verbose_p || $debug_p) && (join(',', sort keys %dsn_option) ne 'delay,failure');
    my($from, $uid);
+   sub check_for_valid_uid () { die "$appName: From header not detected or sender not valid\n" unless defined $uid; }
    scan_mbox_file('-', sub {
 	    my($s, $filename, $lineno) = @_;
 	    if ($s =~ /^From:.*<([^<>]*)>/is || $s =~ /^From:\s*(\S+?)\s*\(.*?\)\s*$/is || $s =~ /^From:\s*(\S+)\s*$/is) {
@@ -509,7 +510,7 @@ sub copy_stdin_to_outbox () {
 	    print OUTPUT $s;
 	 }, sub {
 	    my($s, $filename, $lineno) = @_;
-	    die "$appName: From header not detected\n" unless defined $uid;
+	    check_for_valid_uid;
 	    print OUTPUT "X-Evolution-Identity: $uid\n";
 	    print OUTPUT $s;
 	 }, sub {
@@ -521,6 +522,7 @@ sub copy_stdin_to_outbox () {
 	    }
 	 });
    close OUTPUT;
+   check_for_valid_uid; # in case we got just headers and no body
    print STDERR "$appName: Moving ($tmp) -> ($out)\n" if $debug_p;
    rename $tmp, $out || die "$appName: $out: Rename to \"$out\" failed\n";
 }
