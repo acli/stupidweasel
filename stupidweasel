@@ -1,7 +1,10 @@
 #!/usr/bin/perl
 # vi: set sw=3 ai sm:
-#
-# Stupid hack to use Evolution as a mail transport so that we can use mutt if necessary
+=encoding UTF-8
+=head1 Name
+
+stupidweasel – stupid hack to weasel your mails out into the real world
+=cut
 # Copyright ©2020 by Ambrose Li <ambrose.li@gmail.com>
 
 use strict;
@@ -9,6 +12,12 @@ use integer;
 
 use Getopt::Long qw(:config no_auto_abbrev bundling);
 use POSIX;
+
+use v5.14; # //u modifier
+use utf8;
+use open qw( :encoding(UTF-8) :std );
+use charnames qw( :full :short );
+use feature "unicode_strings";
 
 use vars qw( $outbox $sources $signatures );
 $outbox = "$ENV{HOME}/.local/share/evolution/mail/local/.Outbox";
@@ -42,6 +51,62 @@ use vars qw( %identity );
 use vars qw( %signature );
 
 $force_delete_p = 1;
+
+=head1 Synopsis
+
+B<stupidweasel> [B<-d>] [B<-N> I<dsn>] [B<-n>] [B<-v>] [I<email...>]
+
+B<stupidweasel> B<--list> [B<-d>] [B<-v>]
+
+B<stupidweasel> B<--delete> [B<-d>] [B<-i>] [B<-v>] [I<id...>]
+
+B<stupidweasel> B<--help>
+
+B<stupidweasel> B<--version>
+
+=head1 Description
+
+F<stupidweasel> is a small Perl script intended as a drop-in replacement for L<sendmail(8)>
+on systems having no functional B<sendmail>
+but a working installation of Evolution.
+Its sole purpose is to allow the use of text-mode email clients such as L<mutt(1)>,
+and it does this by putting any mail it receives in Evolution’s Outbox
+after adding a header to let Evolution know which server to use for sending.
+
+Because all it does is to put your emails into Evolution Outbox,
+to actually send them out you have to manually press the Send/Receive button in Evolution.
+
+F<stupidweasel> only handles outgoing mail;
+to read mail with a text email client you might need a second script
+that acts as an Evolution filter.
+
+=head2 Email signatures
+
+If you have multiple email accounts set up in Evolution,
+you might have different signatures set up for different accounts.
+To use the correct signature when using a text email client,
+you can create a .signature file with only one line that reads
+
+=over
+
+(*$insert_signature_here*)
+
+=back
+
+When F<stupidweasel> receives a piece of mail with this directive,
+it will look up the correct signature file from your Evolution configuration
+and replace this directive with the correct signature file
+or the output of the correct signature script.
+
+=head2 Cancelling a send
+
+Because all F<stupidweasel> does is to put your emails in Evolution’s outbox,
+you can cancel your sends until you hit Evolution’s Send/Receive button.
+To do this, you need to find our your email’s ID number by using F<stupidweasel>’s C<--list> option.
+
+After you’ve found out your email’s ID number,
+use F<stupidweasel>’s C<--delete> option to delete it.
+=cut
 
 $SIG{__DIE__} = sub {
    if (-f $tmp) {
@@ -89,6 +154,14 @@ EOF
    exit($status);
 }
 
+=head1 DSN options
+
+F<stupidweasel> accepts a B<sendmail>-compatible B<-N> option
+(which means it must be followed by either the world B<never>,
+or a comma-separate list of words where each word is either B<failure>, B<delay>, or B<success>),
+but the option is currently ignored.
+=cut
+
 sub set_dsn_options ($) {
    my($s) = @_;
    # FIXME: We make sure the value is sendmail-compatible, but we don't actually act on it
@@ -105,6 +178,15 @@ sub set_dsn_options ($) {
    }
 }
 
+=head1 Internals
+
+=head2 looks_like_email_address_p (...)
+
+looks_like_email_address_p takes an array of strings
+and determines if I<all> of the strings look like valid email addresses.
+It returns 1 if they all look valid, 0 otherwise.
+=cut
+
 sub looks_like_email_address_p {
    my $it = 1; # assume it's true then disprove it
    for my $s (@_) {
@@ -119,6 +201,22 @@ for my $test (qw( abc@example.com abc.def@u-example.de abc.def-ghi@ocad.on.ca ))
 for my $test (qw( abc@ @u-example.de @ foo )) {
    die "Test case $test failed" unless !looks_like_email_address_p $test;
 }
+
+=head2 read_data, get_scalar, get_array – reading ini files
+
+The three functions read_data, get_scalar and get_array do generic ini file reading
+and come from my other projects (that’s why the data structure read_data builds looks so odd).
+
+read_data takes a filehandle of an ini file and builds a hash of hashes of arrays that represents the file.
+The first-level hash represents sections in the ini file where the keys are the names of the sections.
+
+get_scalar takes a key and a section hash and returns a string representing
+the first value indexed with the given key in the given section
+(undef is returned if no key-value pair with the given key exists).
+
+get_array does the same thing as get_scalar except it returns an array representing
+all values indexed with the given key.
+=cut
 
 sub read_data (;*) {
    my($h) = @_;
@@ -155,6 +253,18 @@ sub get_array ($$) {
    return !(defined $datum && defined $datum->{$key})? undef: $datum->{$key};
 }
 
+=head2 read_evolution_sources ()
+
+read_evolution_sources goes through all ini files in the Evolution F<sources> directory
+to populate the global hashes C<%sources> and C<%signatures>.
+This allows F<stupidweasel> to determine how to generate the X-Evolution-Identity header
+so that Evolution will send your mail through the correct SMTP server;
+this also allows F<stupidweasel> to determine which signature file should be used
+so that it can correctly process the C<(*insert_signature_here*)> directive.
+
+read_evolution_sources assumes S<[Authentication] User> and S<[Mail Identity] Address> use the same email addresses.
+=cut
+
 sub read_evolution_sources () {
    opendir(SOURCES, $sources) || die "$appName: $sources: $!\n";
    for (;;) {
@@ -187,6 +297,20 @@ sub read_evolution_sources () {
    }
    closedir SOURCES;
 }
+
+=head2 scan_mbox_file( I<filename>, I<f_header>, I<f_sep>, I<f_body> )
+
+scan_mbox_file is a general-purpose deterministic finite-state machine
+for reading mails that are in maildir format.
+It opens the given I<filename> for reading,
+then for each line read call either I<f_header>, I<f_sep>, or I<f_body>
+depending on whether it’s processing input in the (RFC822) header,
+the blank line between the header and body,
+or the (RFC822) body of the mail.
+
+All of I<f_header>, I<f_sep>, and I<f_body> must be closures.
+Any other type of value (including undef) will cause a runtime error.
+=cut
 
 sub scan_mbox_file ($$$$) {
    my($filename, $f_header, $f_sep, $f_body) = @_;
@@ -440,3 +564,8 @@ if ($mode eq 'q') {
    copy_stdin_to_outbox;
 }
 exit $status;
+
+=head1 Reporting bugs
+
+Please report bugs through L<Github|https://github.com/acli/stupidweasel/issues>.
+=cut
