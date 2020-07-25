@@ -3,8 +3,19 @@
 targets=stupidweasel
 man8_targets=stupidweasel.8
 
+ifeq ($(shell id -u), 0)
+
+bindir=/usr/local/sbin
+mandir=/usr/local/man
+symlinks=mailq mailrm
+
+else
+
 bindir=$(HOME)/bin
 mandir=$(HOME)/man
+symlinks=
+
+endif
 
 all: check doc
 
@@ -15,6 +26,7 @@ doc: stupidweasel.8
 install: $(addprefix $(bindir)/,$(targets)) \
 	$(mandir)/man8 \
 	$(addprefix $(mandir)/man8/,$(man8_targets))
+	for i in $(symlinks); do (cd $(bindir) && if [ ! -f "$$i" ]; then ln -sf stupidweasel "$$i"; elif [ ! -L "$$i" ]; then echo "$$i not installed because it is a file" >&2; elif [ stupidweasel != "`readlink "$$i"`" ]; then echo "$$i not installed because it is a symlink to a different command" >&2; fi ); done
 
 $(bindir)/%: %
 	perl -cw $< && install -m 755 $< $@
