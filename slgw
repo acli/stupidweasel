@@ -25,13 +25,15 @@ use vars qw( $test_p );
 use vars qw( $n );
 use vars qw( $output_path );
 
-$output_path = '/tmp/slgw.out';
+$output_path = "/var/mail/$ENV{USER}";
 
 GetOptions(
   'debug|d' => \$debug_p,
   'dry-run|n' => \$dry_run_p,
   'test' => \$test_p,
 ) || exit(1);
+
+$output_path = '/tmp/slgw.out' if $debug_p;
 
 open(OUTPUT, '>>', $output_path) || die "$output_path: $!\n";
 my($headers, $from);

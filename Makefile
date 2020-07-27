@@ -1,6 +1,6 @@
 # vi: set sw=8 ts=8 ai sm noet:
 
-targets=stupidweasel
+targets=stupidweasel slgw
 man8_targets=stupidweasel.8
 
 ifeq ($(shell id -u), 0)
