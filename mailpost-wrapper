@@ -1,0 +1,271 @@
+#!/usr/bin/perl
+# vi: set sw=3 ai sm:
+=encoding UTF-8
+=cut
+# Copyright ©2020 by Ambrose Li <ambrose.li@gmail.com>
+
+use strict;
+use integer;
+
+use Getopt::Long qw(:config no_auto_abbrev bundling);
+use POSIX;
+
+use v5.14; # //u modifier
+use utf8;
+use open qw( :encoding(UTF-8) :std );
+use charnames qw( :full :short );
+use feature "unicode_strings";
+
+use vars qw( $mtaid );
+$mtaid = 'stupidweasel';
+
+use vars qw( $appName $hostname $id );
+
+use vars qw( $status );
+
+$appName = $& if $0 =~ /[^\/]+$/;
+$hostname = `hostname`; chomp $hostname;
+
+use vars qw( $debug_p $dry_run_p );
+use vars qw( $force_delete_p );
+use vars qw( $interactive_p );
+use vars qw( $verbose_p );
+
+$SIG{__DIE__} = sub {
+};
+
+sub show_version_then_exit () {
+   print "$mtaid ($appName) 0.1\n";
+   exit(0);
+}
+
+sub show_usage_then_exit (;$) {
+   my($status) = @_;
+   my($default_inject, $summary);
+   my $h = $status? *STDERR: *STDOUT;
+   $summary = "Inject into news system if post comes from a recognized mailing list";
+   print $h <<EOF;
+usage: $appName [OPTION] ...
+$summary.
+
+  -d, --debug        enable debugging messages
+  -i, --interactive  prompt before every removal
+  -n, --dry-run      do not actually modify the outbox
+  -v, --verbose      use long-form queue listings and show a little more detail
+      --help         show this help and exit
+      --version      output version information and exit
+
+Report bugs to <https://github.com/acli/stupidweasel/issues>.
+EOF
+   exit($status);
+}
+
+=head1 Internals
+
+=head2 looks_like_email_address_p (...)
+
+looks_like_email_address_p takes an array of strings
+and determines if I<all> of the strings look like valid email addresses.
+It returns 1 if they all look valid, 0 otherwise.
+=cut
+
+sub looks_like_email_address_p {
+   my $it = 1; # assume it's true then disprove it
+   for my $s (@_) {
+      $it = 0 unless $s =~ /^[^\@]+\@[a-z][-0-9a-z]*(?:\.[a-z][-0-9a-z]*)+$/;
+   last unless $it;
+   }
+   return $it;
+}
+for my $test (qw( abc@example.com abc.def@u-example.de abc.def-ghi@ocad.on.ca )) {
+   die "Test case $test failed" unless looks_like_email_address_p $test;
+}
+for my $test (qw( abc@ @u-example.de @ foo )) {
+   die "Test case $test failed" unless !looks_like_email_address_p $test;
+}
+
+=head2 read_data, get_scalar, get_array – reading ini files
+
+The three functions read_data, get_scalar and get_array do generic ini file reading
+and come from my other projects (that’s why the data structure read_data builds looks so odd).
+
+read_data takes a filehandle of an ini file and builds a hash of hashes of arrays that represents the file.
+The first-level hash represents sections in the ini file where the keys are the names of the sections.
+
+get_scalar takes a key and a section hash and returns a string representing
+the first value indexed with the given key in the given section
+(undef is returned if no key-value pair with the given key exists).
+
+get_array does the same thing as get_scalar except it returns an array representing
+all values indexed with the given key.
+=cut
+
+sub read_data (;*) {
+   my($h) = @_;
+   my $it;
+   my $section;
+   my $state = 0;
+   for (;;) {
+      my $s = scalar <$h>;
+   last unless defined $s;
+      chomp $s;
+      if ($s =~ /^\s*(?:\s*$|#|;|\/\/)/) {
+         ;
+      } elsif ($s =~ /^\s*\[(.*?)\]\s*$/) {
+         die "$appName: $ARGV:$.: $1: duplicate section\n" if defined $it && defined $it->{$1};
+         $section = $1;
+      } elsif ($s =~ /^\s*([^=]+?)\s*=\s*(.*?)\s*$/) {
+         $it->{$section} = { 'name' => [$section] } unless defined $it && defined $it->{$section};
+         $it->{$section}->{$1} = [] unless defined $it->{$section}->{$1};
+         push @{$it->{$section}->{$1}}, $2;
+      } else {
+         die "$appName: $ARGV:$.: sorry, can't parse ($s)\n";
+      }
+   }
+   return $it;
+}
+
+sub get_scalar ($$) {
+   my($key, $datum) = @_;
+   return !(defined $datum && defined $datum->{$key} && defined $datum->{$key}->[0])? undef: $datum->{$key}->[0];
+}
+
+sub get_array ($$) {
+   my($key, $datum) = @_;
+   return !(defined $datum && defined $datum->{$key})? undef: $datum->{$key};
+}
+
+=head2 scan_mbox_file( I<filename>, I<f_header>, I<f_sep>, I<f_body> )
+
+scan_mbox_file is a general-purpose deterministic finite-state machine
+for reading mails that are in maildir format.
+It opens the given I<filename> for reading,
+then for each line read call either I<f_header>, I<f_sep>, or I<f_body>
+depending on whether it’s processing input in the (RFC822) header,
+the blank line between the header and body,
+or the (RFC822) body of the mail.
+
+All of I<f_header>, I<f_sep>, and I<f_body> must be closures.
+Any other type of value (including undef) will cause a runtime error.
+=cut
+
+sub scan_mbox_file ($$$$) {
+   my($filename, $f_header, $f_sep, $f_body) = @_;
+   my $state = 0;			# State 0 - From_ or header; 1 - header, separator; 3 - body
+   my($from_, @headers);
+   my $h;
+   if (!$filename || $filename eq '-') {
+      ($filename, $h) = ('STDIN', *STDIN);
+   } else {
+      open MBOX, '<', $filename || die "$filename: $!\n";
+      $h = *MBOX;
+   }
+   for (my $in_body_p = 0;;) {
+      my $s = scalar <$h>;
+   last unless defined $s;
+      if ($state == 0 && $s =~ /^From /s) {
+	 $from_ = $s;
+	 $state = 1;
+      } elsif ($state <= 1) {
+	 $state = 1;
+	 if ($s eq "\n") {
+	    for my $header ($from_, @headers) {
+	       &$f_header($header->[0], $filename, $header->[1]);
+	    }
+	    &$f_sep($s, $filename, $.);
+	    $state = 3;
+	 } elsif ($s =~ /^\s/s) {
+	    die "$filename: $.: Illegal continuation header\n" unless @headers;
+	    $headers[$#headers]->[0] .= $s;
+	 } elsif ($s !~ /:/s) {
+	    die "$filename: $.: Malformed header, no colon\n";
+	 } else {
+	    push @headers, [$s, $.];
+	 }
+      } elsif ($state == 3) {
+	 &$f_body($s, $filename, $.);
+      } else {
+	 die "$filename: $.: Internal error: Unexpected state $state\n";
+      }
+   }
+   close MBOX;
+}
+
+## END OF STOLEN STUFF ################################################
+
+sub user_interactively_confirms (;$) {
+   my($prompt) = @_;
+   $prompt = 'Remove?' unless defined $prompt;
+   printf STDERR "%s: %s ", $appName, $prompt;
+   flush STDERR;
+   my $s = scalar <STDIN>;
+   return defined $s && $s =~ /^\s*(?:y|yes)/i;
+}
+
+sub copy_stdin_to_outbox () {
+   open(OUTPUT, '>', $tmp) || die "$appName: $tmp: $!\n";
+   printf OUTPUT "Received: (from %d\@localhost) by %s (%s) id <%s>; %s\n",
+	 $<, $hostname, $mtaid, $id,
+	 POSIX::strftime('%a, %e %b %Y %H:%M:%S %z', localtime time);
+
+   my($from, $to, $cc, $mailinst_list, $list_subscribe, $list_unsubscribe, $list_id);
+   scan_mbox_file('-', sub {
+	    my($s, $filename, $lineno) = @_;
+	    if ($s =~ /^From:.*<([^<>]*)>/is || $s =~ /^From:\s*(\S+?)\s*\(.*?\)\s*$/is || $s =~ /^From:\s*(\S+)\s*$/is) {
+	       $from = $1;
+	    }
+	    print OUTPUT $s;
+	 }, sub {
+	    my($s, $filename, $lineno) = @_;
+	    print OUTPUT "X-Evolution-Identity: $uid\n";
+	    print OUTPUT $s;
+	 }, sub {
+	    my($s, $filename, $lineno) = @_;
+	    if ($s =~ /^\s*\(\*\$insert_signature_here\*\)\s*\n/s) {
+	       copy_signature_to OUTPUT, $from, $uid;
+	    } else {
+	       print OUTPUT $s;
+	    }
+	 });
+   close OUTPUT;
+   check_for_valid_uid $uid; # in case we got just headers and no body
+   print STDERR "$appName: Moving ($tmp) -> ($out)\n" if $debug_p;
+   rename $tmp, $out || die "$appName: $out: Rename to \"$out\" failed\n";
+}
+
+if ($mode eq 'rm') {
+   for my $arg (@ARGV) {
+      $targets{$arg} = 0;
+   }
+   @ARGV = ();
+} elsif (!$mode) {
+   for my $arg (@ARGV) {
+      die "$appName: $arg: Does not seem to be a valid email address\n" unless looks_like_email_address_p $arg;
+      $expected_recipient = $arg;
+   }
+   @ARGV = ();
+}
+die "$appName: Unknown options @ARGV\n" if @ARGV && $mode ne 'rm';
+
+($tmp, $out) = ("$id.tmp", "$id.out") if $dry_run_p;
+$ENV{LANG} = 'C';
+
+read_evolution_sources;
+if ($mode eq 'q') {
+   display_outbox_summary;
+} elsif ($mode eq 'rm') {
+   remove_queued_email;
+} else {
+   copy_stdin_to_outbox;
+}
+exit $status;
+
+=head1 See also
+
+L<mailpost(8)>,
+L<stupidweasel(8)>
+
+=head1 Reporting bugs
+
+Please report bugs through L<Github|https://github.com/acli/stupidweasel/issues>.
+=cut
