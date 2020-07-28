@@ -1,6 +1,7 @@
 #!/usr/bin/perl
 # vi: set sw=3 ai sm:
 =encoding UTF-8
+
 =head1 Name
 
 stupidweasel – stupid hack to weasel your mails out into the real world
@@ -575,6 +576,7 @@ exit $status;
 =head1 See also
 
 L<evolution(1)>,
+L<slgw(1)>,
 L<muttrc(5)>
 
 L<Novell, Inc.

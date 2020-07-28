@@ -1,7 +1,13 @@
 #!/usr/bin/perl
 # vi:set sw=2 ai sm:
 #
-# sygw - sysline gateway
+=encoding UTF-8
+
+=head1 Name
+
+slgw – sysline gateway
+=cut
+# Copyright ©2020 by Ambrose Li <ambrose.li@gmail.com>
 
 use strict;
 use integer;
@@ -63,3 +69,47 @@ if ($n) {
 }
 print OUTPUT "\n" if $n;	# doesn't matter for sysline; needed to keep the file actual mbox format
 print "$n line(s) read\n" if $test_p;
+
+__END__
+
+=head1 Synopsis
+
+B<slgw> [B<-d>] [B<-n>] [B<-t>]
+
+=head1 Description
+
+F<slgw> uses Evolution’s filter feature to simulate mail delivery to a local mailbox,
+so that L<sysline(1)>’s mail notification features can function on a system with no functional L<sendmail(8)>.
+
+F<slgw> reads a maildir-format mail (the format used by Evolution) from standard input
+and appends an equivalent mbox-format mail to an output file,
+normally /var/mail/I<$USER>,
+the per-user local mailbox.
+
+=head1 Options
+
+=over
+
+=item -d, --debug
+
+Debug mode. Displays debugging messages on standard error.
+
+=item -n, --dry-run
+
+Dry-run mode. Do not actually append anything to the output file.
+
+=item -t, --test
+
+Test mode. Changes output file to /tmp/slgw.out.
+
+=back
+
+=head1 See also
+
+L<stupidweasel(1)>,
+L<sysline(1)>
+
+=head1 Reporting bugs
+
+Please report bugs through L<Github|https://github.com/acli/stupidweasel/issues>.
+=cut
