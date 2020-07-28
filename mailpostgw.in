@@ -25,8 +25,8 @@ use feature "unicode_strings";
 use vars qw( $localgroups $mailpost );
 use vars qw( $newsuser $installed_path );
 $localgroups = '/opt/inn/etc/localgroups';
-$mailpost = '/opt/inn/bin/mailpost';
-$newsuser = 'news';
+$mailpost = '@@MAILPOST@@';
+$newsuser = '@@NEWSUSER@@';
 $installed_path = '/usr/local/sbin/mailpostgw';
 
 use vars qw( $appName $hostname $id );
@@ -72,6 +72,7 @@ EOF
 
 sub check_for_correct_user () {
    my $correct_uid = (getpwnam($newsuser))[2];
+   print STDERR "DEBUG: current uid is $<, euid is $>\n" if $debug_p;
    if ($> != $correct_uid) {
       my $flag = 'MAILPOSTGW_WAS_HERE';
       die "$appName: Failed to switch uid to $newsuser\n" if defined $ENV{$flag};
@@ -288,8 +289,6 @@ GetOptions(
 ) || show_usage_then_exit(1);
 
 die "$appName: Unknown options @ARGV\n" if @ARGV;
-
-print STDERR "DEBUG: running as uid $< ($>)\n" if $debug_p;
 
 $ENV{LANG} = 'C';
 
