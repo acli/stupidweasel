@@ -36,10 +36,10 @@ install: $(addprefix $(bindir)/,$(targets)) \
 	for i in $(symlinks); do (cd $(bindir) && if [ ! -f "$$i" ]; then ln -sf stupidweasel "$$i"; elif [ ! -L "$$i" ]; then echo "$$i not installed because it is a file" >&2; elif [ stupidweasel != "`readlink "$$i"`" ]; then echo "$$i not installed because it is a symlink to a different command" >&2; fi ); done
 
 $(bindir)/mailpostgw: mailpostgw
-	perl -cw $< && install -o news -g news -m 2755 $< $@
+	perl -Tcw $< && install -o news -g news -m 6755 $< $@
 
 $(bindir)/%: %
-	perl -cw $< && install -m 755 $< $@
+	perl -Tcw $< && install -m 755 $< $@
 
 $(mandir)/man8:
 	mkdir -p $@
@@ -48,7 +48,7 @@ $(mandir)/man8/%: %
 	install -m 644 $< $@
 
 %.chk: %
-	perl -cw $<
+	perl -Tcw $<
 
 %.8: %
 	perl -nle 'print /^(=head1)(.*)/s? "$$1\U$$2": $$_' $< | pod2man --utf8 --section 8 -c 'System Management Manual' -n "$(shell echo "$*"|tr '[:lower:]' '[:upper:]')" > $@

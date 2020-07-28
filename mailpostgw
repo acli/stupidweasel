@@ -229,7 +229,7 @@ sub look_at_stdin () {
 			my $list = $lists->{$section};
 			for my $chk (($list->{'address'}? @{$list->{'address'}}: ()), ($list->{'id'})? @{$list->{'id'}}: ()) {
 			   if (lc $det eq lc $chk) {
-			      print STDERR "DEBUG: $det matches $chk\n";
+			      print STDERR "DEBUG: $det matches $chk\n" if $debug_p;
 			      for my $groups (get_array('localgroup', $list)) {
 				 for my $group (@$groups) {
 				    $newsgroups{$group} = 1;
@@ -245,11 +245,13 @@ sub look_at_stdin () {
 	       my $junk = get_scalar('junk', $lists->{''});
 	       $junk = 'junk' unless defined $junk;
 	       $newsgroups{$junk} = 1;
-	       print STDERR "DEBUG: no lists recognized but List-Id or List-Unsubscribe header found, putting in $junk\n";
+	       print STDERR "DEBUG: no lists recognized but List-Id or List-Unsubscribe header found, putting in $junk\n" if $debug_p;
 	    }
-	    printf STDERR "DEBUG: newsgroups: %s\n", join(', ', sort keys %newsgroups);
+	    printf STDERR "DEBUG: newsgroups: %s\n", join(', ', sort keys %newsgroups) if $debug_p;
 	    if (%newsgroups) {
-	       my $st = open(OUTPUT, '|-', $mailpost, [sort keys %newsgroups]) || die "$appName: $mailpost: $!\n";
+	       my @cmdline = ($mailpost, '-d', 'local', sort keys %newsgroups);
+	       printf STDERR "Executing command: %s\n", join(' ', @cmdline) if $debug_p || $verbose_p;
+	       my $st = open(OUTPUT, '|-', $mailpost, [@cmdline[1..$#cmdline]]) || die "$appName: $mailpost: $!\n";
 	       for my $header (@headers) {
 		  print OUTPUT $header;
 	       }
@@ -264,7 +266,17 @@ sub look_at_stdin () {
    close OUTPUT;
 }
 
+GetOptions(
+   'd|debug'		=> \$debug_p,
+   'n|dry-run'		=> \$dry_run_p,
+   'v|verbose'		=> \$verbose_p,
+   'help'		=> \&show_usage_then_exit,
+   'version'		=> \&show_version_then_exit,
+) || show_usage_then_exit(1);
+
 die "$appName: Unknown options @ARGV\n" if @ARGV;
+
+print STDERR "DEBUG: running as uid $< ($>)\n" if $debug_p;
 
 $ENV{LANG} = 'C';
 
