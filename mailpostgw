@@ -13,6 +13,7 @@ use strict;
 use integer;
 
 use Getopt::Long qw(:config no_auto_abbrev bundling);
+use Data::Dumper;
 use POSIX;
 
 use v5.14; # //u modifier
@@ -27,7 +28,7 @@ $mailpost = '/opt/inn/bin/mailpost';
 
 use vars qw( $appName $hostname $id );
 use vars qw( $status );
-use vars qw( %localgroups %lists );
+use vars qw( %localgroups $lists );
 
 $appName = $& if $0 =~ /[^\/]+$/;
 $hostname = `hostname`; chomp $hostname;
@@ -204,25 +205,54 @@ sub scan_mbox_file ($$$$) {
 sub read_localgroups () {
 }
 
+sub read_config_file () {
+   my $input = 'lists.dat';
+   open INPUT, '<', $input || die "$input: $!\n";
+   $lists = read_data INPUT;
+   close INPUT;
+}
+
 sub look_at_stdin () {
    my(@headers, %headers);
+   my %newsgroups;
    scan_mbox_file('-', sub {
 	    my($s, $filename, $lineno) = @_;
 	    push @headers, $s;
 	    push @{$headers{+lc $1}}, $2 if $s =~ /^([^:]+)\s*:\s*(.*)/s;
 	 }, sub {
 	    my($s, $filename, $lineno) = @_;
-	    for my $candidate ('from', 'to', 'cc', 'delivered-to', 'mailing-list') {
+	    for my $candidate ('from', 'to', 'cc', 'delivered-to', 'mailing-list', 'list-id') {
 	       if (defined $headers{$candidate}) {
 		  for my $det (@{$headers{$candidate}}) {
-		     if ($det =~ /^.*<([^<>]*)>/is || $det =~ /^(\S+?)\s*\(.*?\)\s*$/is || $det =~ /^(\S+)\s*$/is) {
-			print STDERR "DEBUG: candidate=($candidate), 1=($1)\n";
+		     $det = $1 if $det =~ /^.*<([^<>]*)>/is || $det =~ /^(\S+?)\s*\(.*?\)\s*$/is || $det =~ /^(\S+)\s*$/is;
+		     for my $section (keys %$lists) {
+			my $list = $lists->{$section};
+			for my $chk (($list->{'address'}? @{$list->{'address'}}: ()), ($list->{'id'})? @{$list->{'id'}}: ()) {
+			   if (lc $det eq lc $chk) {
+			      print STDERR "DEBUG: $det matches $chk\n";
+			      for my $groups (get_array('localgroup', $list)) {
+				 for my $group (@$groups) {
+				    $newsgroups{$group} = 1;
+				 }
+			      }
+			   }
+			}
 		     }
 		  }
 	       }
 	    }
-	    exit 99;
-	    print OUTPUT $s;
+	    if (!%newsgroups && (defined $headers{'list-id'} || defined $headers{'list-unsubscribe'})) {
+	       my $junk = get_scalar('junk', $lists->{''});
+	       $junk = 'junk' unless defined $junk;
+	       $newsgroups{$junk} = 1;
+	       print STDERR "DEBUG: no lists recognized but List-Id or List-Unsubscribe header found, putting in $junk\n";
+	    }
+	    printf STDERR "DEBUG: newsgroups: %s\n", join(', ', sort keys %newsgroups);
+	    if (%newsgroups) {
+	       print OUTPUT $s;
+	    } else {
+	       exit;
+	    }
 	 }, sub {
 	    my($s, $filename, $lineno) = @_;
 	    print OUTPUT $s;
@@ -234,6 +264,7 @@ die "$appName: Unknown options @ARGV\n" if @ARGV;
 
 $ENV{LANG} = 'C';
 
+read_config_file;
 look_at_stdin;
 exit $status;
 
