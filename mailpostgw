@@ -249,6 +249,10 @@ sub look_at_stdin () {
 	    }
 	    printf STDERR "DEBUG: newsgroups: %s\n", join(', ', sort keys %newsgroups);
 	    if (%newsgroups) {
+	       my $st = open(OUTPUT, '|-', $mailpost, [sort keys %newsgroups]) || die "$appName: $mailpost: $!\n";
+	       for my $header (@headers) {
+		  print OUTPUT $header;
+	       }
 	       print OUTPUT $s;
 	    } else {
 	       exit;
