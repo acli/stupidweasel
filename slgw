@@ -68,7 +68,7 @@ if ($n) {
   }
 }
 print OUTPUT "\n" if $n;	# doesn't matter for sysline; needed to keep the file actual mbox format
-print "$n line(s) read\n" if $test_p;
+print "$n line(s) read\n" if $debug_p;
 
 __END__
 
