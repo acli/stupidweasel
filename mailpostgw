@@ -1,6 +1,11 @@
 #!/usr/bin/perl
 # vi: set sw=3 ai sm:
 =encoding UTF-8
+
+=head1 Name
+
+mailpostgw - mailpost gateway
+
 =cut
 # Copyright ©2020 by Ambrose Li <ambrose.li@gmail.com>
 
@@ -16,12 +21,13 @@ use open qw( :encoding(UTF-8) :std );
 use charnames qw( :full :short );
 use feature "unicode_strings";
 
-use vars qw( $mtaid );
-$mtaid = 'stupidweasel';
+use vars qw( $localgroups $mailpost );
+$localgroups = '/opt/inn/etc/localgroups';
+$mailpost = '/opt/inn/bin/mailpost';
 
 use vars qw( $appName $hostname $id );
-
 use vars qw( $status );
+use vars qw( %localgroups %lists );
 
 $appName = $& if $0 =~ /[^\/]+$/;
 $hostname = `hostname`; chomp $hostname;
@@ -35,7 +41,7 @@ $SIG{__DIE__} = sub {
 };
 
 sub show_version_then_exit () {
-   print "$mtaid ($appName) 0.1\n";
+   print "$appName 0.1\n";
    exit(0);
 }
 
@@ -60,29 +66,7 @@ EOF
    exit($status);
 }
 
-=head1 Internals
-
-=head2 looks_like_email_address_p (...)
-
-looks_like_email_address_p takes an array of strings
-and determines if I<all> of the strings look like valid email addresses.
-It returns 1 if they all look valid, 0 otherwise.
-=cut
-
-sub looks_like_email_address_p {
-   my $it = 1; # assume it's true then disprove it
-   for my $s (@_) {
-      $it = 0 unless $s =~ /^[^\@]+\@[a-z][-0-9a-z]*(?:\.[a-z][-0-9a-z]*)+$/;
-   last unless $it;
-   }
-   return $it;
-}
-for my $test (qw( abc@example.com abc.def@u-example.de abc.def-ghi@ocad.on.ca )) {
-   die "Test case $test failed" unless looks_like_email_address_p $test;
-}
-for my $test (qw( abc@ @u-example.de @ foo )) {
-   die "Test case $test failed" unless !looks_like_email_address_p $test;
-}
+## BEGIN: STOLEN STUFF FROM STUPIDWEASEL ################################################
 
 =head2 read_data, get_scalar, get_array – reading ini files
 
@@ -133,6 +117,30 @@ sub get_scalar ($$) {
 sub get_array ($$) {
    my($key, $datum) = @_;
    return !(defined $datum && defined $datum->{$key})? undef: $datum->{$key};
+}
+
+=head1 Internals
+
+=head2 looks_like_email_address_p (...)
+
+looks_like_email_address_p takes an array of strings
+and determines if I<all> of the strings look like valid email addresses.
+It returns 1 if they all look valid, 0 otherwise.
+=cut
+
+sub looks_like_email_address_p {
+   my $it = 1; # assume it's true then disprove it
+   for my $s (@_) {
+      $it = 0 unless $s =~ /^[^\@]+\@[a-z][-0-9a-z]*(?:\.[a-z][-0-9a-z]*)+$/;
+   last unless $it;
+   }
+   return $it;
+}
+for my $test (qw( abc@example.com abc.def@u-example.de abc.def-ghi@ocad.on.ca )) {
+   die "Test case $test failed" unless looks_like_email_address_p $test;
+}
+for my $test (qw( abc@ @u-example.de @ foo )) {
+   die "Test case $test failed" unless !looks_like_email_address_p $test;
 }
 
 =head2 scan_mbox_file( I<filename>, I<f_header>, I<f_sep>, I<f_body> )
@@ -193,72 +201,53 @@ sub scan_mbox_file ($$$$) {
 
 ## END OF STOLEN STUFF ################################################
 
-sub user_interactively_confirms (;$) {
-   my($prompt) = @_;
-   $prompt = 'Remove?' unless defined $prompt;
-   printf STDERR "%s: %s ", $appName, $prompt;
-   flush STDERR;
-   my $s = scalar <STDIN>;
-   return defined $s && $s =~ /^\s*(?:y|yes)/i;
+sub read_localgroups () {
 }
 
-sub copy_stdin_to_outbox () {
-   open(OUTPUT, '>', $tmp) || die "$appName: $tmp: $!\n";
-   printf OUTPUT "Received: (from %d\@localhost) by %s (%s) id <%s>; %s\n",
-	 $<, $hostname, $mtaid, $id,
-	 POSIX::strftime('%a, %e %b %Y %H:%M:%S %z', localtime time);
-
-   my($from, $to, $cc, $mailinst_list, $list_subscribe, $list_unsubscribe, $list_id);
+sub look_at_stdin () {
+   my(@headers, %headers);
    scan_mbox_file('-', sub {
 	    my($s, $filename, $lineno) = @_;
-	    if ($s =~ /^From:.*<([^<>]*)>/is || $s =~ /^From:\s*(\S+?)\s*\(.*?\)\s*$/is || $s =~ /^From:\s*(\S+)\s*$/is) {
-	       $from = $1;
+	    push @headers, $s;
+	    push @{$headers{+lc $1}}, $2 if $s =~ /^([^:]+)\s*:\s*(.*)/s;
+	 }, sub {
+	    my($s, $filename, $lineno) = @_;
+	    for my $candidate ('from', 'to', 'cc', 'delivered-to', 'mailing-list') {
+	       if (defined $headers{$candidate}) {
+		  for my $det (@{$headers{$candidate}}) {
+		     if ($det =~ /^.*<([^<>]*)>/is || $det =~ /^(\S+?)\s*\(.*?\)\s*$/is || $det =~ /^(\S+)\s*$/is) {
+			print STDERR "DEBUG: candidate=($candidate), 1=($1)\n";
+		     }
+		  }
+	       }
 	    }
+	    exit 99;
 	    print OUTPUT $s;
 	 }, sub {
 	    my($s, $filename, $lineno) = @_;
-	    print OUTPUT "X-Evolution-Identity: $uid\n";
 	    print OUTPUT $s;
-	 }, sub {
-	    my($s, $filename, $lineno) = @_;
-	    if ($s =~ /^\s*\(\*\$insert_signature_here\*\)\s*\n/s) {
-	       copy_signature_to OUTPUT, $from, $uid;
-	    } else {
-	       print OUTPUT $s;
-	    }
 	 });
    close OUTPUT;
-   check_for_valid_uid $uid; # in case we got just headers and no body
-   print STDERR "$appName: Moving ($tmp) -> ($out)\n" if $debug_p;
-   rename $tmp, $out || die "$appName: $out: Rename to \"$out\" failed\n";
 }
 
-if ($mode eq 'rm') {
-   for my $arg (@ARGV) {
-      $targets{$arg} = 0;
-   }
-   @ARGV = ();
-} elsif (!$mode) {
-   for my $arg (@ARGV) {
-      die "$appName: $arg: Does not seem to be a valid email address\n" unless looks_like_email_address_p $arg;
-      $expected_recipient = $arg;
-   }
-   @ARGV = ();
-}
-die "$appName: Unknown options @ARGV\n" if @ARGV && $mode ne 'rm';
+die "$appName: Unknown options @ARGV\n" if @ARGV;
 
-($tmp, $out) = ("$id.tmp", "$id.out") if $dry_run_p;
 $ENV{LANG} = 'C';
 
-read_evolution_sources;
-if ($mode eq 'q') {
-   display_outbox_summary;
-} elsif ($mode eq 'rm') {
-   remove_queued_email;
-} else {
-   copy_stdin_to_outbox;
-}
+look_at_stdin;
 exit $status;
+
+=head1 Description
+
+F<mailpostgw> uses Evolution’s filter feature to simulate mail delivery to a pipe,
+so that INN’s L<mailpost(8)> mail-to-news gateway can function on a system with no functional L<sendmail(8)>.
+
+F<mailpostgw> reads a maildir-format mail (the format used by Evolution) from standard input.
+It first reads the mail’s headers.
+If it detects a recognized mailing list,
+it creates a pipe to L<mailpost> to send the headers, then continues to pipe the rest of the mail to L<mailpost>;
+if no mailing list is detected it simply exits.
+
 
 =head1 See also
 

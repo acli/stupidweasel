@@ -1,7 +1,8 @@
 # vi: set sw=8 ts=8 ai sm noet:
 
-user_targets=stupidweasel
-system_targets=$(user_targets) mailpost-wrapper
+user_targets=stupidweasel slgw
+system_targets=$(user_targets) mailpostgw
+man8_targets=stupidweasel.8 slgw.8 mailpostgw.8
 
 mailpost=/opt/innd/bin/mailpost
 mailpost_as=news
@@ -34,7 +35,7 @@ install: $(addprefix $(bindir)/,$(targets)) \
 	$(addprefix $(mandir)/man8/,$(man8_targets))
 	for i in $(symlinks); do (cd $(bindir) && if [ ! -f "$$i" ]; then ln -sf stupidweasel "$$i"; elif [ ! -L "$$i" ]; then echo "$$i not installed because it is a file" >&2; elif [ stupidweasel != "`readlink "$$i"`" ]; then echo "$$i not installed because it is a symlink to a different command" >&2; fi ); done
 
-$(bindir)/mailpost-wrapper: mailpost-wrapper
+$(bindir)/mailpostgw: mailpostgw
 	perl -cw $< && install -o news -g news -m 2755 $< $@
 
 $(bindir)/%: %
