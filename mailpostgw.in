@@ -308,7 +308,7 @@ sub look_at_stdin () {
 		  debug_message "Pretending to execute command: %s", join(' ', @cmdline) if $debug_p || $verbose_p;
 		  open(OUTPUT, '>', '/dev/null');
 	       } else {
-		  debug_message "Executing command: %s", join(' ', @cmdline) if $debug_p || $verbose_p;
+		  debug_message sprintf 'Executing command: %s', join(' ', @cmdline) if $debug_p || $verbose_p;
 		  my $st = open(OUTPUT, '|-');
 		  die "$appName: $mailpost: fork: $!\n" unless defined $st;
 		  if (!$st) {
