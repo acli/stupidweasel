@@ -79,7 +79,7 @@ last unless defined $s;
       $n += 1; # increment counter only after pipe for the current message is closed
       print STDERR "\n" if $verbose_p && $n > 1;
 
-      my @cmdline = ('mailpostgw');
+      my @cmdline = ('mailpostgw', '--tag', "msg $n");
       push @cmdline, '-d' if $debug_p;
       push @cmdline, '-n' if $dry_run_p;
       push @cmdline, '-v' if $verbose_p;
