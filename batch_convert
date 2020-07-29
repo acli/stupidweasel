@@ -41,7 +41,7 @@ usage: $appName [OPTION] ...
 Feed every mail in your local mailbox into mailpostgw.
 
   -d, --debug        enable debugging messages
-  -n, --dry-run      do not actually run mailpostgw
+  -n, --dry-run      do not actually run mailpost
   -v, --verbose      explain what is being done
       --help         show this help and exit
       --version      output version information and exit
@@ -78,16 +78,20 @@ last unless defined $s;
       }
       $n += 1; # increment counter only after pipe for the current message is closed
       print STDERR "\n" if $verbose_p && $n > 1;
-      if ($dry_run_p) {
-	 open OUTPUT, '>', '/dev/null';
-	 print STDERR "$appName: Message $n will be sent to the blackhole\n" if $verbose_p;
-      } else {
-	 my @cmdline = ('mailpostgw');
-	 push @cmdline, '-d' if $debug_p;
-	 push @cmdline, '-v' if $verbose_p;
-	 open OUTPUT, '|-', @cmdline[0], @cmdline[1..$#cmdline] || die "$appName: $cmdline[0]: $!\n";
-	 printf STDERR "$appName: Message $n will be sent to %s\n", join(' ', @cmdline) if $verbose_p;
+
+      my @cmdline = ('mailpostgw');
+      push @cmdline, '-d' if $debug_p;
+      push @cmdline, '-n' if $dry_run_p;
+      push @cmdline, '-v' if $verbose_p;
+      my $h = open OUTPUT, '|-';
+      die "$appName: $cmdline[0]: fork: $!\n" unless defined $h;
+      if (!$h) {
+	 printf STDERR "Executing command: %s\n", join(' ', @cmdline) if $debug_p || $verbose_p;
+	 exec { $cmdline[0] } @cmdline;
+	 die "$appName: $cmdline[0]: exec: $!\n";
       }
+      printf STDERR "$appName: Message $n will be sent to %s\n", join(' ', @cmdline) if $verbose_p;
+
       # Don't bother send the From_ header to mailpostgw because it's not a real header and contains no useful information
       $pipe_opened_p = 1;
       $size_i = 0;
