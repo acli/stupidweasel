@@ -76,6 +76,8 @@ last unless defined $s;
 	 close OUTPUT;
 	 print STDERR "$appName: Message $n was $size_i byte(s).\n" if $verbose_p;
       }
+      $n += 1; # increment counter only after pipe for the current message is closed
+      print STDERR "\n" if $verbose_p && $n > 1;
       if ($dry_run_p) {
 	 open OUTPUT, '>', '/dev/null';
 	 print STDERR "$appName: Message $n will be sent to the blackhole\n" if $verbose_p;
@@ -89,7 +91,6 @@ last unless defined $s;
       # Don't bother send the From_ header to mailpostgw because it's not a real header and contains no useful information
       $pipe_opened_p = 1;
       $size_i = 0;
-      $n += 1;
    } else {
       print OUTPUT $s;
    }

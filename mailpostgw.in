@@ -228,6 +228,12 @@ sub read_config_file () {
    close INPUT;
 }
 
+sub extract_possible_email_address_from ($) {
+   my($det) = @_;
+   $det = $1 if $det =~ /^.*<([^<>]*)>/is || $det =~ /^(\S+?)\s*\(.*?\)\s*$/is || $det =~ /^(\S+)\s*$/is;
+   return $det;
+}
+
 sub look_at_stdin () {
    my(@headers, %headers);
    my %newsgroups;
@@ -237,10 +243,12 @@ sub look_at_stdin () {
 	    push @{$headers{+lc $1}}, $2 if $s =~ /^([^:]+)\s*:\s*(.*)/s;
 	 }, sub {
 	    my($s, $filename, $lineno) = @_;
+
+	    # Figure out if this came from some mailing list
 	    for my $candidate ('from', 'to', 'cc', 'delivered-to', 'mailing-list', 'list-id') {
 	       if (defined $headers{$candidate}) {
 		  for my $det (@{$headers{$candidate}}) {
-		     $det = $1 if $det =~ /^.*<([^<>]*)>/is || $det =~ /^(\S+?)\s*\(.*?\)\s*$/is || $det =~ /^(\S+)\s*$/is;
+		     $det = extract_possible_email_address_from($det);
 		     for my $section (keys %$lists) {
 			my $list = $lists->{$section};
 			for my $chk (($list->{'address'}? @{$list->{'address'}}: ()), ($list->{'id'})? @{$list->{'id'}}: ()) {
@@ -265,6 +273,15 @@ sub look_at_stdin () {
 	    }
 	    printf STDERR "DEBUG: newsgroups: %s\n", join(', ', sort keys %newsgroups) if $debug_p;
 	    if (%newsgroups) {
+	       # If it didn't come with an Organization header fabricate a reasonable one because having ours in the post makes no sense.
+	       if (!defined $headers{'organization'}) {
+		  my $possible_sender_domain = $1 if extract_possible_email_address_from($headers{'from'}) =~ /\@(.*)$/;
+		  my $fakeness = "Organization: $possible_sender_domain";
+		  push @headers, "$fakeness\n";
+		  print STDERR "$appName: Injecting $fakeness\n" if $debug_p;
+	       }
+
+	       # Post the article
 	       my @cmdline = ($mailpost, '-d', 'local', sort keys %newsgroups);
 	       printf STDERR "Executing command: %s\n", join(' ', @cmdline) if $debug_p || $verbose_p;
 	       my $st = open(OUTPUT, '|-', $mailpost, @cmdline[1..$#cmdline]) || die "$appName: $mailpost: $!\n";
