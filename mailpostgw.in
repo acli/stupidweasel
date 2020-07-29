@@ -362,6 +362,11 @@ If it detects a recognized mailing list,
 it creates a pipe to L<mailpost> to send the headers, then continues to pipe the rest of the mail to L<mailpost>;
 if no mailing list is detected it simply exits.
 
+=head1 Bugs
+
+MIME digests (e.g., as sent by CE-L) are not correctly handled.
+If the real L<mailpost(8)> isn’t correctly handling them
+we’ll have to break up the MIME parts ourselves.
 
 =head1 See also
 
