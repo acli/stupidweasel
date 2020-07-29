@@ -10,7 +10,7 @@ system_targets=$(user_targets) mailpostgw
 man8_targets=stupidweasel.8 slgw.8 mailpostgw.8
 
 # mailpost - where is the mailpost command
-mailpost=/opt/innd/bin/mailpost
+mailpost=/software/inn/bin/mailpost
 
 # mailpost_as - what user should mailpost be run as
 mailpost_as=news

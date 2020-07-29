@@ -22,16 +22,16 @@ use open qw( :encoding(UTF-8) :std );
 use charnames qw( :full :short );
 use feature "unicode_strings";
 
-use vars qw( $localgroups $mailpost );
-use vars qw( $newsuser $installed_path );
-$localgroups = '/opt/inn/etc/localgroups';
+use vars qw( $mailpost $newsuser );
 $mailpost = '@@MAILPOST@@';
 $newsuser = '@@NEWSUSER@@';
-$installed_path = '/usr/local/sbin/mailpostgw';
 
 use vars qw( $appName $hostname $id );
 use vars qw( $status );
 use vars qw( %localgroups $lists );
+
+use vars qw( @original_argv );
+@original_argv = @ARGV;
 
 $appName = $& if $0 =~ /[^\/]+$/;
 $hostname = `hostname`; chomp $hostname;
@@ -72,12 +72,14 @@ EOF
 
 sub check_for_correct_user () {
    my $correct_uid = (getpwnam($newsuser))[2];
-   print STDERR "DEBUG: current uid is $<, euid is $>\n" if $debug_p;
+   print STDERR "DEBUG: current uid is $<, euid $>; expecting uid $correct_uid\n" if $debug_p;
    if ($> != $correct_uid) {
       my $flag = 'MAILPOSTGW_WAS_HERE';
       die "$appName: Failed to switch uid to $newsuser\n" if defined $ENV{$flag};
-      my @cmd = ('sudo', '-u', $newsuser, $0);
-      exec { $cmd[0] } @cmd || die "$appName: $cmd[0]: $!\n";
+      my @cmd = ('sudo', '-n', '-u', $newsuser, '--', $0, @original_argv);
+      printf STDERR "Executing command: %s\n", join(' ', @cmd) if $debug_p || $verbose_p;
+      exec { $cmd[0] } @cmd;
+      die "$appName: $cmd[0]: $!\n";
    }
 }
 
@@ -187,7 +189,7 @@ sub scan_mbox_file ($$$$) {
       my $s = scalar <$h>;
    last unless defined $s;
       if ($state == 0 && $s =~ /^From /s) {
-	 $from_ = $s;
+	 $from_ = [$s, $.];
 	 $state = 1;
       } elsif ($state <= 1) {
 	 $state = 1;
@@ -265,12 +267,13 @@ sub look_at_stdin () {
 	    if (%newsgroups) {
 	       my @cmdline = ($mailpost, '-d', 'local', sort keys %newsgroups);
 	       printf STDERR "Executing command: %s\n", join(' ', @cmdline) if $debug_p || $verbose_p;
-	       my $st = open(OUTPUT, '|-', $mailpost, [@cmdline[1..$#cmdline]]) || die "$appName: $mailpost: $!\n";
+	       my $st = open(OUTPUT, '|-', $mailpost, @cmdline[1..$#cmdline]) || die "$appName: $mailpost: $!\n";
 	       for my $header (@headers) {
 		  print OUTPUT $header;
 	       }
 	       print OUTPUT $s;
 	    } else {
+	       printf STDERR "$appName: No mailing list detected in input.\n" if $debug_p || $verbose_p;
 	       exit;
 	    }
 	 }, sub {

@@ -330,7 +330,7 @@ sub scan_mbox_file ($$$$) {
       my $s = scalar <$h>;
    last unless defined $s;
       if ($state == 0 && $s =~ /^From /s) {
-	 $from_ = $s;
+	 $from_ = [$s, $.];
 	 $state = 1;
       } elsif ($state <= 1) {
 	 $state = 1;

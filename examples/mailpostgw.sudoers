@@ -1,0 +1,6 @@
+# NOTE: This needs to be installed (into /etc/sudoers.d or equivalent) without a file extension
+
+# Real users can run mailpostgw with no password, but only at the installed location
+# (assuming all real users are in the ssh group)
+
+%ssh	ALL = (news) NOPASSWD: /usr/local/sbin/mailpostgw
