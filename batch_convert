@@ -23,6 +23,7 @@ $appName = $& if $0 =~ /[^\/]+$/;
 $hostname = `hostname`; chomp $hostname;
 
 use vars qw( $debug_p $dry_run_p );
+use vars qw( $use_system_mailbox_p );
 use vars qw( $verbose_p );
 use vars qw( $skip );
 
@@ -38,28 +39,20 @@ sub show_usage_then_exit (;$) {
    my($status) = @_;
    my $h = $status? *STDERR: *STDOUT;
    print $h <<EOF;
-usage: $appName [OPTION] ...
-Feed every mail in your local mailbox into mailpostgw.
+usage: $appName [OPTION] ... [FILE] ...
+Import your local mailbox or the specified file(s) into mailpostgw.
 
-  -d, --debug        enable debugging messages
-  -n, --dry-run      do not actually run mailpost
-  -v, --verbose      explain what is being done
-      --help         show this help and exit
-      --version      output version information and exit
+  -d, --debug            enable debugging messages
+  -m, --mbox, --mailbox  import from your local mailbox
+  -n, --dry-run          do not actually run mailpost
+  -v, --verbose          explain what is being done
+      --help             show this help and exit
+      --version          output version information and exit
 
 Report bugs to <https://github.com/acli/stupidweasel/issues>.
 EOF
    exit($status);
 }
-
-GetOptions(
-   'd|debug'		=> \$debug_p,
-   'n|dry-run'		=> \$dry_run_p,
-   'skip=i'		=> \$skip,
-   'v|verbose'		=> \$verbose_p,
-   'help'		=> \&show_usage_then_exit,
-   'version'		=> \&show_version_then_exit,
-) || show_usage_then_exit(1);
 
 sub debug_message ($) {
    my($msg) = @_;
@@ -68,56 +61,88 @@ sub debug_message ($) {
    print STDERR "$prefix$msg\n";
 }
 
-my $mailbox = "/var/mail/$ENV{USER}";
-my($n, $size_i, $size_total, $pipe_opened_p);
-open INPUT, '<:perlio', $mailbox || die "$appName: $mailbox: $!\n";
-for (;;) {
-   my $s = scalar <INPUT>;
-last if eof INPUT;
-   if ($verbose_p) {
-      use bytes;
-      my $m = length $s;
-      $size_i += $m;
-      $size_total += $m;
-   }
-   if ($s =~ /^From .*?\d:\d\d:\d\d.*? \d{4}\n$/s) {
-      if ($pipe_opened_p) {
-	 close OUTPUT;
-	 debug_message "Message $n was $size_i byte(s)." if $verbose_p;
+sub batch_convert ($) {
+   my($mailbox) = @_; # INPUT should be already open and $mailbox is the corresponding filename
+   my($n, $size_i, $size_total, $pipe_opened_p) = (0, 0, 0, 0);
+   debug_message "Starting batch conversion from $mailbox..." if $verbose_p;
+   for (;;) {
+      my $s = scalar <INPUT>;
+   last unless defined $s;
+      if ($verbose_p) {
+	 use bytes;
+	 my $m = length $s;
+	 $size_i += $m;
+	 $size_total += $m;
       }
-      $n += 1; # increment counter only after pipe for the current message is closed
-      print STDERR "\n" if $verbose_p && $n > 1;
-
-      if (defined $skip && $n <= $skip) {
-	 debug_message "Skipping message $n\n" if $debug_p || $verbose_p;
-	 open(OUTPUT, '>', '/dev/null');
-	 $pipe_opened_p = -1;
-      } else {
-	 my @cmdline = ('mailpostgw', '--tag', "msg $n", '-k');
-	 push @cmdline, '-d' if $debug_p;
-	 push @cmdline, '-n' if $dry_run_p;
-	 push @cmdline, '-v' if $verbose_p;
-	 flush STDERR;
-	 $pipe_opened_p = open OUTPUT, '|-';
-	 die "$appName: $cmdline[0]: fork: $!\n" unless defined $pipe_opened_p;
-	 if (!$pipe_opened_p) {
-	    debug_message sprintf "Executing command: %s", join(' ', @cmdline) if $debug_p || $verbose_p;
-	    flush STDERR;
-	    exec { $cmdline[0] } @cmdline;
-	    die "$appName: $cmdline[0]: exec: $!\n";
+      if ($s =~ /^From .*?\d:\d\d:\d\d.*? \d{4}\n$/s) {
+	 if ($pipe_opened_p) {
+	    close OUTPUT;
+	    debug_message "Message $n was $size_i byte(s)." if $verbose_p;
 	 }
-	 debug_message sprintf "Message $n will be sent to %s", join(' ', @cmdline) if $verbose_p;
-	 flush STDERR;
-      }
+	 $n += 1; # increment counter only after pipe for the current message is closed
+	 print STDERR "\n" if $verbose_p && $n > 1;
 
-      # Don't bother send the From_ header to mailpostgw because it's not a real header and contains no useful information
-      $size_i = 0;
-   } else {
-      print OUTPUT $s;
+	 if (defined $skip && $n <= $skip) {
+	    debug_message "Skipping message $n\n" if $debug_p || $verbose_p;
+	    open(OUTPUT, '>', '/dev/null');
+	    $pipe_opened_p = -1;
+	 } else {
+	    my @cmdline = ('mailpostgw', '--tag', "msg $n", '-k');
+	    push @cmdline, '-d' if $debug_p;
+	    push @cmdline, '-n' if $dry_run_p;
+	    push @cmdline, '-v' if $verbose_p;
+	    flush STDERR;
+	    $pipe_opened_p = open OUTPUT, '|-';
+	    die "$appName: $cmdline[0]: fork: $!\n" unless defined $pipe_opened_p;
+	    if (!$pipe_opened_p) {
+	       debug_message sprintf "Executing command: %s", join(' ', @cmdline) if $debug_p || $verbose_p;
+	       flush STDERR;
+	       exec { $cmdline[0] } @cmdline;
+	       die "$appName: $cmdline[0]: exec: $!\n";
+	    }
+	    debug_message sprintf "Message $n will be sent to %s", join(' ', @cmdline) if $verbose_p;
+	    flush STDERR;
+	 }
+
+	 # Don't bother send the From_ header to mailpostgw because it's not a real header and contains no useful information
+	 $size_i = 0;
+      } else {
+	 print OUTPUT $s;
+      }
    }
+   if ($pipe_opened_p) {
+      close OUTPUT;
+      debug_message "Message $n was $size_i byte(s)." if $verbose_p;
+   }
+   debug_message "$n message(s) of total size $size_total byte(s) processed.\n" if $verbose_p;
 }
-if ($pipe_opened_p) {
-   close OUTPUT;
-   debug_message "Message $n was $size_i byte(s)." if $verbose_p;
+
+sub batch_convert_from_file ($) {
+   my($mailbox) = @_;
+   open INPUT, '<:perlio', $mailbox || die "$appName: $mailbox: $!\n";
+   my $it = batch_convert $mailbox;
+   close INPUT;
+   return $it;
 }
-debug_message "$n message(s) of total size $size_total byte(s) processed.\n" if $verbose_p;
+
+GetOptions(
+   'd|debug'		=> \$debug_p,
+   'm|mailbox|mbox'	=> \$use_system_mailbox_p,
+   'n|dry-run'		=> \$dry_run_p,
+   'skip=i'		=> \$skip,
+   'v|verbose'		=> \$verbose_p,
+   'help'		=> \&show_usage_then_exit,
+   'version'		=> \&show_version_then_exit,
+) || show_usage_then_exit(1);
+
+if ($use_system_mailbox_p) {
+   die "$appName: --mbox option cannot be used with additional file names\n" if @ARGV;
+   batch_convert_from_file "/var/mail/$ENV{USER}";
+} elsif (@ARGV) {
+   for my $mailbox (@ARGV) {
+      batch_convert_from_file $mailbox;
+   }
+} else {
+   open INPUT, '<&STDIN' || die "$appName: stdin: Dup failed\n";
+   batch_convert 'STDIN';
+}
