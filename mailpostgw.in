@@ -28,6 +28,7 @@ $newsuser = '@@NEWSUSER@@';
 
 use vars qw( $appName $hostname $id );
 use vars qw( $tag );
+use vars qw( $tag2 );
 use vars qw( $status );
 use vars qw( %localgroups $lists );
 
@@ -78,6 +79,7 @@ sub debug_message ($) {
    my($msg) = @_;
    my $prefix = "$appName: ";
    $prefix .= "$tag: " if defined $tag;
+   $prefix .= "$tag2: " if defined $tag2;
    chomp $msg;
    print STDERR "$prefix$msg\n";
 }
@@ -371,7 +373,7 @@ sub look_at_stdin () {
    my %newsgroups;
    my $blackhole_p;
    my($multipart_mixed_p, $boundary, @preamble, @mime_parts, $hold_p, $digest_p);
-   my($L2_state, $L2_headers);
+   my($L2_state, $L2_headers, $L2_number);
    my($L3_state, $L3_headers, @L3_headers, $L3_partial_header);
    scan_mbox_file('-',
 	 # From_
@@ -438,9 +440,12 @@ sub look_at_stdin () {
 			my $type = lc $1 if get_scalar('content-type', $L2_headers) =~ /^([^;\s]+)/;
 			if ($type eq 'message/rfc822') {
 			   debug_message sprintf 'DEBUG: posting attachment %d', scalar @mime_parts if $debug_p;
+			   $L2_number += 1;
+			   $tag2 = "post $L2_number";
 			   ($L3_state, $L3_headers, $L3_partial_header, @L3_headers) = (0, {});
 			} else {
 			   debug_message sprintf "DEBUG: ignoring attachment %d of wrong type %s", scalar @mime_parts, $type if $debug_p;
+			   undef $tag2;
 			}
 
 		     # Otherwise check if this attachment is a MIME digest, in which case we activate digest mode
