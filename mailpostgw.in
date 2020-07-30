@@ -339,13 +339,44 @@ sub newsgroups_list_is_the_blackhole_p ($) {
    return defined $newsgroups && keys %$newsgroups == 1 && (keys %$newsgroups)[0] eq '/dev/null';
 }
 
+sub decode_qp ($) {
+   my($s) = @_;
+   $s =~ s{=([0-9a-f][0-9a-f])}{ chr(hex($1)) }egis;
+   return $s;
+}
+
+sub sanitize_header ($) {
+   my($s0) = @_;
+   my $s;
+   # If we get ?us-ascii?q? or ?utf-8?q? but everything inside is just ASCII, just decode it and replace with bare ASCII
+   # because while trn(1) knows how to decode these, nn(1) doesn't so nn output looks like crap.
+   for (; $s0;) {
+      if ($s0 =~ /^(.*?)(=\?([a-z][-0-9a-z]+)\?q\?([^\?]*)\?=)(.*)$/is) {
+	 my($before, $item, $encoding, $encoded, $after) = ($1, $2, $3, $4, $5);
+	 my $decoded = decode_qp $encoded;
+	 if ($decoded =~ /^[\040-\176]*$/s && $decoded !~ /(?:"|\?=)/s) {
+	    $s .= $before . $decoded;
+	    $s0 = $after;
+	    debug_message "replacing ($item) with ($decoded)" if $debug_p;
+	 } else {
+	    $s .= $before . $item;
+	    $s0 = $after;
+	 }
+      } else {
+	 $s .= $s0;
+	 undef $s0;
+      }
+   }
+   return $s;
+}
+
 sub inject_header ($$$;$) {
    my($s, $headers, $header_dict, $announce_p) = @_; # $s, \@headers, \%headers
    if ($s =~ /^([^:]+)\s*:\s*(.*?)\s*$/s) {
-      my($key, $val) = (lc $1, $2);
+      my($key, $val) = ($1, sanitize_header $2);
       if ($val) {
-	 push @$headers, $s;
-	 push @{$header_dict->{$key}}, $val;
+	 push @$headers, "$key: $val\n";
+	 push @{$header_dict->{+lc $key}}, $val;
 	 debug_message "DEBUG: Injecting $s" if $announce_p && $debug_p;
       } else {
 	 debug_message "Discarding $key header with no value" if $debug_p;
