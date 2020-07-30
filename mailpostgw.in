@@ -32,7 +32,7 @@ use vars qw( $status );
 use vars qw( %localgroups $lists );
 
 use vars qw( @original_argv );
-@original_argv = map { $_ } @ARGV; # force a clone
+@original_argv = @ARGV;
 
 $appName = $& if $0 =~ /[^\/]+$/;
 $hostname = `hostname`; chomp $hostname;
@@ -40,6 +40,7 @@ $hostname = `hostname`; chomp $hostname;
 use vars qw( $debug_p $dry_run_p );
 use vars qw( $force_delete_p );
 use vars qw( $interactive_p );
+use vars qw( $keep_going_p );
 use vars qw( $verbose_p );
 
 $SIG{__DIE__} = sub {
@@ -61,8 +62,9 @@ $summary.
 
   -d, --debug        enable debugging messages
   -i, --interactive  prompt before every removal
+  -k, --keep-going   always keep reading until eof (INTERNAL USE ONLY)
   -n, --dry-run      do not actually modify the outbox
-      --tag=TAG      tag debug messages with the given tag
+      --tag=TAG      tag debug messages with given TAG (INTERNAL USE ONLY)
   -v, --verbose      use long-form queue listings and show a little more detail
       --help         show this help and exit
       --version      output version information and exit
@@ -88,6 +90,7 @@ sub check_for_correct_user () {
       die "$appName: Failed to switch uid to $newsuser\n" if defined $ENV{$flag};
       my @cmd = ('sudo', '-n', '-u', $newsuser, '--', $0, @original_argv);
       debug_message sprintf 'Executing command: %s', join(' ', @cmd) if $debug_p || $verbose_p;
+      flush STDERR;
       exec { $cmd[0] } @cmd;
       die "$appName: $cmd[0]: $!\n";
    }
@@ -120,6 +123,7 @@ sub read_data (;*) {
       my $s = scalar <$h>;
    last unless defined $s;
       chomp $s;
+      chop $s if $s =~ /\r$/s; # Let's see if Evolution was the problem =P
       if ($s =~ /^\s*(?:\s*$|#|;|\/\/)/) {
          ;
       } elsif ($s =~ /^\s*\[(.*?)\]\s*$/) {
@@ -247,6 +251,7 @@ sub extract_possible_email_address_from ($) {
 sub known_mailing_lists_for ($) {
    my($det) = @_;
    my %newsgroups;
+   debug_message "DEBUG: candidate email ($det)" if $debug_p;
    for my $section (keys %$lists) {
       if ($section ne '') {
 	 my $list = $lists->{$section};
@@ -255,7 +260,7 @@ sub known_mailing_lists_for ($) {
 	       debug_message "DEBUG: $det matches $chk" if $debug_p;
 	       for my $groups (get_array('localgroup', $list)) {
 		  for my $group (@$groups) {
-		     $newsgroups{$group} = 1;
+		     $newsgroups{$group} = { 'organization' => get_scalar('organization', $list) };
 		  }
 	       }
 	    }
@@ -268,6 +273,7 @@ sub known_mailing_lists_for ($) {
 sub look_at_stdin () {
    my(@headers, %headers);
    my %newsgroups;
+   my $blackhole_p;
    scan_mbox_file('-', sub {
 	    my($s, $filename, $lineno) = @_;
 	    push @headers, $s;
@@ -281,7 +287,7 @@ sub look_at_stdin () {
 		  for my $det (@{$headers{$candidate}}) {
 		     my %det = known_mailing_lists_for(extract_possible_email_address_from($det));
 		     for my $group (keys %det) {
-			$newsgroups{$group} = 1;
+			$newsgroups{$group} = $det{$group};
 		     }
 		  }
 	       }
@@ -289,7 +295,7 @@ sub look_at_stdin () {
 	    if (!%newsgroups && (defined $headers{'list-id'} || defined $headers{'list-unsubscribe'})) {
 	       my $junk = get_scalar('junk', $lists->{''});
 	       $junk = 'junk' unless defined $junk;
-	       $newsgroups{$junk} = 1;
+	       $newsgroups{$junk} = {};
 	       debug_message "DEBUG: no lists recognized but List-Id or List-Unsubscribe header found, putting in $junk" if $debug_p;
 	    }
 	    debug_message sprintf "DEBUG: newsgroups: %s", join(', ', sort keys %newsgroups) if $debug_p;
@@ -297,7 +303,8 @@ sub look_at_stdin () {
 	       # If it didn't come with an Organization header fabricate a reasonable one because having ours in the post makes no sense.
 	       if (!defined $headers{'organization'}) {
 		  # Actually, trying to guess is too hard because there's no standard way to figure out who sent the mail to a list
-		  my $fakeness = "Organization: Unknown";
+		  my $organization = $newsgroups{+(keys(%newsgroups))[0]}->{'organization'};
+		  my $fakeness = sprintf('Organization: %s', ($organization || 'Unknown'));
 		  push @headers, "$fakeness\n";
 		  debug_message "DEBUG: Injecting $fakeness" if $debug_p;
 	       }
@@ -305,10 +312,11 @@ sub look_at_stdin () {
 	       # Post the article
 	       my @cmdline = ($mailpost, '-d', 'local', sort keys %newsgroups);
 	       if ($dry_run_p) {
-		  debug_message "Pretending to execute command: %s", join(' ', @cmdline) if $debug_p || $verbose_p;
+		  debug_message sprintf 'Pretending to execute command: %s', join(' ', @cmdline) if $debug_p || $verbose_p;
 		  open(OUTPUT, '>', '/dev/null');
 	       } else {
 		  debug_message sprintf 'Executing command: %s', join(' ', @cmdline) if $debug_p || $verbose_p;
+		  flush STDERR;
 		  my $st = open(OUTPUT, '|-');
 		  die "$appName: $mailpost: fork: $!\n" unless defined $st;
 		  if (!$st) {
@@ -322,11 +330,12 @@ sub look_at_stdin () {
 	       print OUTPUT $s;
 	    } else {
 	       debug_message 'No mailing list detected in input.' if $debug_p || $verbose_p;
-	       exit;
+	       exit unless $keep_going_p;
+	       $blackhole_p = 1
 	    }
 	 }, sub {
 	    my($s, $filename, $lineno) = @_;
-	    print OUTPUT $s;
+	    print OUTPUT $s unless $blackhole_p;
 	 });
    close OUTPUT;
 }
@@ -335,6 +344,7 @@ printf STDERR "DEBUG: $appName: called with arguments [(%s)]\n", join(') (', @AR
 
 GetOptions(
    'd|debug'		=> \$debug_p,
+   'k|keep-going'	=> \$keep_going_p,
    'n|dry-run'		=> \$dry_run_p,
    'tag=s'		=> \$tag,
    'v|verbose'		=> \$verbose_p,

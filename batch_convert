@@ -63,10 +63,10 @@ GetOptions(
 
 my $mailbox = "/var/mail/$ENV{USER}";
 my($n, $size_i, $size_total, $pipe_opened_p);
-open INPUT, '<:stdio', $mailbox || die "$appName: $mailbox: $!\n";
-for ($pipe_opened_p = 0;;) {
+open INPUT, '<:perlio', $mailbox || die "$appName: $mailbox: $!\n";
+for (;;) {
    my $s = scalar <INPUT>;
-last unless defined $s;
+last if eof INPUT;
    if ($verbose_p) {
       use bytes;
       my $m = length $s;
@@ -84,23 +84,26 @@ last unless defined $s;
       if (defined $skip && $n <= $skip) {
 	 printf STDERR "Skipping message $n\n" if $debug_p || $verbose_p;
 	 open(OUTPUT, '>', '/dev/null');
+	 $pipe_opened_p = -1;
       } else {
-	 my @cmdline = ('mailpostgw', '--tag', "msg $n");
+	 my @cmdline = ('mailpostgw', '--tag', "msg $n", '-k');
 	 push @cmdline, '-d' if $debug_p;
 	 push @cmdline, '-n' if $dry_run_p;
 	 push @cmdline, '-v' if $verbose_p;
-	 my $h = open OUTPUT, '|-';
-	 die "$appName: $cmdline[0]: fork: $!\n" unless defined $h;
-	 if (!$h) {
+	 flush STDERR;
+	 $pipe_opened_p = open OUTPUT, '|-';
+	 die "$appName: $cmdline[0]: fork: $!\n" unless defined $pipe_opened_p;
+	 if (!$pipe_opened_p) {
 	    printf STDERR "Executing command: %s\n", join(' ', @cmdline) if $debug_p || $verbose_p;
+	    flush STDERR;
 	    exec { $cmdline[0] } @cmdline;
 	    die "$appName: $cmdline[0]: exec: $!\n";
 	 }
 	 printf STDERR "$appName: Message $n will be sent to %s\n", join(' ', @cmdline) if $verbose_p;
+	 flush STDERR;
       }
 
       # Don't bother send the From_ header to mailpostgw because it's not a real header and contains no useful information
-      $pipe_opened_p = 1;
       $size_i = 0;
    } else {
       print OUTPUT $s;
