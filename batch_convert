@@ -61,6 +61,13 @@ GetOptions(
    'version'		=> \&show_version_then_exit,
 ) || show_usage_then_exit(1);
 
+sub debug_message ($) {
+   my($msg) = @_;
+   my $prefix = "$appName: ";
+   chomp $msg;
+   print STDERR "$prefix$msg\n";
+}
+
 my $mailbox = "/var/mail/$ENV{USER}";
 my($n, $size_i, $size_total, $pipe_opened_p);
 open INPUT, '<:perlio', $mailbox || die "$appName: $mailbox: $!\n";
@@ -73,16 +80,16 @@ last if eof INPUT;
       $size_i += $m;
       $size_total += $m;
    }
-   if ($s =~ /^From /) {
+   if ($s =~ /^From .*?\d:\d\d:\d\d.*? \d{4}\n$/s) {
       if ($pipe_opened_p) {
 	 close OUTPUT;
-	 print STDERR "$appName: Message $n was $size_i byte(s).\n" if $verbose_p;
+	 debug_message "Message $n was $size_i byte(s)." if $verbose_p;
       }
       $n += 1; # increment counter only after pipe for the current message is closed
       print STDERR "\n" if $verbose_p && $n > 1;
 
       if (defined $skip && $n <= $skip) {
-	 printf STDERR "Skipping message $n\n" if $debug_p || $verbose_p;
+	 debug_message "Skipping message $n\n" if $debug_p || $verbose_p;
 	 open(OUTPUT, '>', '/dev/null');
 	 $pipe_opened_p = -1;
       } else {
@@ -94,12 +101,12 @@ last if eof INPUT;
 	 $pipe_opened_p = open OUTPUT, '|-';
 	 die "$appName: $cmdline[0]: fork: $!\n" unless defined $pipe_opened_p;
 	 if (!$pipe_opened_p) {
-	    printf STDERR "Executing command: %s\n", join(' ', @cmdline) if $debug_p || $verbose_p;
+	    debug_message sprintf "Executing command: %s", join(' ', @cmdline) if $debug_p || $verbose_p;
 	    flush STDERR;
 	    exec { $cmdline[0] } @cmdline;
 	    die "$appName: $cmdline[0]: exec: $!\n";
 	 }
-	 printf STDERR "$appName: Message $n will be sent to %s\n", join(' ', @cmdline) if $verbose_p;
+	 debug_message sprintf "Message $n will be sent to %s", join(' ', @cmdline) if $verbose_p;
 	 flush STDERR;
       }
 
@@ -111,6 +118,6 @@ last if eof INPUT;
 }
 if ($pipe_opened_p) {
    close OUTPUT;
-   print STDERR "$appName: Message $n was $size_i byte(s).\n" if $verbose_p;
+   debug_message "Message $n was $size_i byte(s)." if $verbose_p;
 }
-print STDERR "$appName: $n message(s) of total size $size_total byte(s) processed.\n" if $verbose_p;
+debug_message "$n message(s) of total size $size_total byte(s) processed.\n" if $verbose_p;

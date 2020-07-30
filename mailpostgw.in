@@ -217,7 +217,7 @@ sub scan_mbox_file ($$$$$) {
 	    &$f_sep($s, $filename, $.) if defined $f_sep;
 	    $state = 3;
 	 } elsif ($s =~ /^\s/s) {
-	    die "$filename: $.: Illegal continuation header\n" unless @headers;
+	    die "$filename: $.: Illegal continuation header \"$s\"\n" unless @headers;
 	    $headers[$#headers]->[0] .= $s;
 	 } elsif ($s !~ /:/s) {
 	    die "$filename: $.: Malformed header, no colon\n";
@@ -239,7 +239,7 @@ sub read_localgroups () {
 }
 
 sub read_config_file () {
-   my $input = 'lists.dat';
+   my $input = '@@INPUT@@';
    open INPUT, '<', $input || die "$input: $!\n";
    $lists = read_data INPUT;
    close INPUT;

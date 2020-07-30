@@ -41,28 +41,45 @@ $output_path = $test_p? '/tmp/slgw.out': "/var/mail/$ENV{USER}";
 
 open(OUTPUT, '>>', $output_path) || die "$output_path: $!\n";
 my($headers, $from);
+my($encoding, $qp_p);
 for (;;) {
   my $s = scalar <>;
 last unless defined $s;
   $headers .= $s;
-  if ($s =~ /^From:.*<([^<>]*)>/i) {
+last if $s eq "\n";
+  if ($s =~ /^From:.*<([^<>\s]*)>/si) {
     $from = $1;
-  } elsif ($s =~ /^From:\s*(.*)\s*$/i) {
+  } elsif ($s =~ /^From:\s*(\S+)\s*$/si) {
     $from = $1;
-    $from =~ s/\(.*?\)//sg;
+  } elsif ($s =~ /^From:\s*(.*)\s*$/si) {
+    $from = $1;
+    $from =~ s/\([^\(\)]*?\)//sg;
     $from =~ s/^\s+//s;
     $from =~ s/\s+$//s;
+    $from = $1 if $from =~ /\s/ && $from =~ /([^\s\@]+\@[^\s\@]+)/; # XXX
+  } elsif ($s =~ /^Content-Transfer-Encoding:\s*([^\s;]+)/is) {
+    $encoding = lc $1;
+    $qp_p = $encoding eq 'quoted-printable';
+    print STDERR "Content-Transfer-Encoding detected, encoding is $encoding\n" if $debug_p;
   }
   $n += 1;
 }
 if ($n) {
-  $from = 'MAILER-DAEMON' unless defined $from;
+  $from = 'MAILER-DAEMON' unless defined $from && $from =~ /\@/ && $from !~ /\s/;
   print STDERR "from=($from)\n" if $debug_p;
   print OUTPUT sprintf("From %s %s\n", $from, scalar gmtime) unless $dry_run_p;
   print OUTPUT $headers unless $dry_run_p;
   for (;;) {
     my $s = scalar <>;
   last unless defined $s;
+    if ($s =~ /^From /s) {
+      print STDERR "Bare \"From \" in message body, trying to work around\n" if $debug_p;
+      if ($qp_p) {
+	$s =~ s/^F/=46/s;
+      } else {
+	$s =~ s/^/>/s;
+      }
+    }
     print OUTPUT $s unless $dry_run_p;
     $n += 1;
   }
@@ -85,6 +102,10 @@ F<slgw> reads a maildir-format mail (the format used by Evolution) from standard
 and appends an equivalent mbox-format mail to an output file,
 normally /var/mail/I<$USER>,
 the per-user local mailbox.
+
+Because the mbox format has trouble with lines starting with “From ”,
+F<slgw> tries to compensate either by changing the F to =46
+or inserting a > sign before the F.
 
 =head1 Options
 
