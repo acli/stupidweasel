@@ -313,7 +313,7 @@ sub post_article_and_leave_OUTPUT_open ($$$$) {
    }
    if (defined $headers) {
       for my $header (@$headers) {
-	 if ($header =~ /^(Status|X-Evolution-[^:]+)\s*:/ || $header =~ /^((?:ARC|X-BHAM-STAMP|DKIM)-[^:]+)\s*:/) {
+	 if ($header =~ /^(Status|X-Evolution-[^:]+)\s*:/ || $header =~ /^((?:ARC|X-BHAM-STAMP|DKIM|X-IPAS|X-IronPort)-[^:]+)\s*:/) {
 	    debug_message "Discarding $1 header" if $debug_p;
 	 } else {
 	    print OUTPUT $header;
@@ -361,7 +361,7 @@ sub inject_organization_header_if_not_present ($$$) {
    my $it;
    if (!defined $header_dict->{'organization'}) {
       my $organization = $newsgroups->{+(keys(%$newsgroups))[0]}->{'organization'};
-      $it = inject_header sprintf('Organization: %s', ($organization || 'Unknown')), $headers, $header_dict, 1;
+      $it = inject_header sprintf("Organization: %s\n", ($organization || 'Unknown')), $headers, $header_dict, 1;
    }
    return $it;
 }
@@ -370,7 +370,7 @@ sub look_at_stdin () {
    my(@headers, %headers);
    my %newsgroups;
    my $blackhole_p;
-   my($multipart_mixed_p, $boundary, @preamble, @mime_parts, $L2_state, $L2_headers, $L3_headers, $hold_p, $digest_p);
+   my($multipart_mixed_p, $boundary, @preamble, @mime_parts, $L2_state, $L2_headers, $L3_state, @L3_headers, $L3_headers, $hold_p, $digest_p);
    scan_mbox_file('-',
 	 # From_
 	 undef,
@@ -435,8 +435,8 @@ sub look_at_stdin () {
 		     if ($digest_p) {
 			my $type = lc $1 if get_scalar('content-type', $L2_headers) =~ /^([^;\s]+)/;
 			if ($type eq 'message/rfc822') {
-			   post_article_and_leave_OUTPUT_open(\%newsgroups, undef, undef, undef); # real article is in the digest part body
 			   debug_message sprintf 'DEBUG: posting attachment %d', scalar @mime_parts if $debug_p;
+			   ($L3_state, $L3_headers, @L3_headers) = (0, {}, ());
 			} else {
 			   debug_message sprintf "DEBUG: ignoring attachment %d of wrong type %s", scalar @mime_parts, $type if $debug_p;
 			}
@@ -454,7 +454,21 @@ sub look_at_stdin () {
 		  }
 	       } elsif ($L2_state == 3) { # attachment body
 		  if ($digest_p) {
-		     print OUTPUT $s unless $s =~ /^--$boundary(?:--)?\r?\n$/s;
+		     if ($s =~ /^--$boundary(?:--)?\r?\n$/s) {
+			;
+		     } else {
+			if ($L3_state == 0) {			# L3 header or sep
+			   if ($s =~ /^\r?\n$/s) {		# L3 sep
+			      inject_organization_header_if_not_present(\%newsgroups, \@L3_headers, $L3_headers);
+			      post_article_and_leave_OUTPUT_open(\%newsgroups, \@L3_headers, [$s], undef);
+			      $L3_state = 1;
+			   } else {				# L3 header
+			      inject_header($s, \@L3_headers, $L3_headers);
+			   }
+			} else {				# L3 body
+			   print OUTPUT $s;
+			}
+		     }
 		  } else {
 		     push @{$mime_parts[$#mime_parts]->{'body'}}, $s;
 		  }
