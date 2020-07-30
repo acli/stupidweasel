@@ -300,7 +300,7 @@ sub post_article_and_leave_OUTPUT_open ($$$$) {
    my @cmdline = ($mailpost, '-d', 'local', sort keys %$newsgroups);
    if ($dry_run_p) {
       debug_message sprintf 'Pretending to execute command: %s', join(' ', @cmdline) if $debug_p || $verbose_p;
-      open(OUTPUT, '>', '/dev/null');
+      open(OUTPUT, ($debug_p > 1? '>&STDERR': '>/dev/null'));
    } else {
       debug_message sprintf 'Executing command: %s', join(' ', @cmdline) if $debug_p || $verbose_p;
       flush STDERR;
@@ -347,17 +347,30 @@ sub inject_header ($$$;$) {
 	 debug_message "DEBUG: Injecting $s" if $announce_p && $debug_p;
       } else {
 	 debug_message "Discarding $key header with no value" if $debug_p;
+	 undef $s;
       }
    } else {
       debug_message "INTERNAL ERROR: Received invalid header \"$s\" from scan_mbox_file" if $debug_p;
+      undef $s;
    }
+   return $s;
+}
+
+sub inject_organization_header_if_not_present ($$$) {
+   my($newsgroups, $headers, $header_dict) = @_; # \%newsgroups, \@headers, \%headers
+   my $it;
+   if (!defined $header_dict->{'organization'}) {
+      my $organization = $newsgroups->{+(keys(%$newsgroups))[0]}->{'organization'};
+      $it = inject_header sprintf('Organization: %s', ($organization || 'Unknown')), $headers, $header_dict, 1;
+   }
+   return $it;
 }
 
 sub look_at_stdin () {
    my(@headers, %headers);
    my %newsgroups;
    my $blackhole_p;
-   my($multipart_mixed_p, $boundary, @preamble, @mime_parts, $hold_p, $mime_state);
+   my($multipart_mixed_p, $boundary, @preamble, @mime_parts, $L2_state, $L2_headers, $L3_headers, $hold_p, $digest_p);
    scan_mbox_file('-',
 	 # From_
 	 undef,
@@ -375,17 +388,14 @@ sub look_at_stdin () {
 	    %newsgroups = determine_newsgroups_from_header_hash \%headers;
 	    if (%newsgroups && !newsgroups_list_is_the_blackhole_p(\%newsgroups)) {
 	       # If it didn't come with an Organization header fabricate a reasonable one because having ours in the post makes no sense.
-	       if (!defined $headers{'organization'}) {
-		  my $organization = $newsgroups{+(keys(%newsgroups))[0]}->{'organization'};
-		  inject_header sprintf('Organization: %s', ($organization || 'Unknown')), \@headers, \%headers, 1;
-	       }
+	       inject_organization_header_if_not_present(\%newsgroups, \@headers, \%headers);
 
 	       # Post the article unless it MIGHT be a MIME digest
 	       if (get_scalar('mime-version', \%headers) eq '1.0'
 			&& get_scalar('content-type', \%headers) =~ /^multipart\/mixed;.*?\bboundary=(["'])?([^\1]+)\1/is) {
 
 		  ($hold_p, $multipart_mixed_p, $boundary) = (1, 1, $2);
-		  debug_message "Delaying article post due to detected multipart/mixed, boundary: $boundary" if $debug_p || $verbose_p;
+		  debug_message "Delaying article post due to detected multipart/mixed, boundary $boundary" if $debug_p || $verbose_p;
 	       } else {
 		  post_article_and_leave_OUTPUT_open(\%newsgroups, \@headers, [$s], undef);
 	       }
@@ -400,39 +410,76 @@ sub look_at_stdin () {
 	    my($s, $filename, $lineno) = @_;
 	    if ($blackhole_p) {
 	       ;
-	    } elsif (!$hold_p) {
+	    } elsif (!$hold_p && !$digest_p) {
 	       print OUTPUT $s;
 	    } else {
-	       if ($mime_state == 0) { # preamble before blank line
+	       if ($L2_state == 0) { # preamble before blank line
 		  push @preamble, $s;
-		  $mime_state = 1 if $s =~ /^\r?\n$/s;
-	       } elsif ($mime_state == 1) { # preamble after blank line
+		  $L2_state = 1 if $s =~ /^\r?\n$/s;
+	       } elsif ($L2_state == 1) { # preamble after blank line
 		  push @preamble, $s;
 		  if ($s =~ /^--$boundary\r?\n$/s) {
-		     $mime_state = 2;
-		     push @mime_parts, {'headers' => [], 'sep' => [], 'body' => []}; # create blank attachment
+		     $L2_state = 2;
+		     $L2_headers = {}; push @mime_parts, {'headers' => [], 'sep' => [], 'body' => []}; # create blank attachment
 		     debug_message sprintf 'DEBUG: attachment %d', scalar @mime_parts if $debug_p;
 		  } elsif ($s =~ /^--$boundary--\r?\n$/s) {
 		     $hold_p = 0;
 		  }
-	       } elsif ($mime_state == 2) { # attachment header
+	       } elsif ($L2_state == 2) { # attachment header
+		  my $this_part = $mime_parts[$#mime_parts];
 		  if ($s =~ /^\r?\n$/s) {
-		     push @{$mime_parts[$#mime_parts]->{'sep'}}, $s;
-		     $mime_state = 3;
+		     push @{$this_part->{'sep'}}, $s;
+		     $L2_state = 3;
+
+		     # If we're in digest mode already, check if the attachment is message/rfc822
+		     if ($digest_p) {
+			my $type = lc $1 if get_scalar('content-type', $L2_headers) =~ /^([^;\s]+)/;
+			if ($type eq 'message/rfc822') {
+			   post_article_and_leave_OUTPUT_open(\%newsgroups, undef, undef, undef); # real article is in the digest part body
+			   debug_message sprintf 'DEBUG: posting attachment %d', scalar @mime_parts if $debug_p;
+			} else {
+			   debug_message sprintf "DEBUG: ignoring attachment %d of wrong type %s", scalar @mime_parts, $type if $debug_p;
+			}
+
+		     # Otherwise check if this attachment is a MIME digest, in which case we activate digest mode
+		     } else {
+			my $L2_boundary = $2 if get_scalar('content-type', $L2_headers) =~ /^multipart\/digest\s*;.*?\bboundary=(["'])?([^\1]+)\1/is;
+			if ($L2_boundary) {
+			   debug_message sprintf "DEBUG: resetting MIME state because found MIME digest, boundary $L2_boundary" if $debug_p;
+			   ($L2_state, $digest_p, $boundary) = (4, 1, $L2_boundary);
+			}
+		     }
 		  } else {
-		     push @mime_parts[$#mime_parts]->{'headers'}, $s;
+		     inject_header($s, $this_part->{'headers'}, $L2_headers);
 		  }
-	       } elsif ($mime_state == 3) { # attachment body
-		  push @{$mime_parts[$#mime_parts]->{'body'}}, $s;
+	       } elsif ($L2_state == 3) { # attachment body
+		  if ($digest_p) {
+		     print OUTPUT $s unless $s =~ /^--$boundary(?:--)?\r?\n$/s;
+		  } else {
+		     push @{$mime_parts[$#mime_parts]->{'body'}}, $s;
+		  }
 		  if ($s =~ /^--$boundary\r?\n$/s) {
-		     $mime_state = 2;
-		     push @mime_parts, {'headers' => [], 'sep' => [], 'body' => []}; # create blank attachment
+		     close OUTPUT if $digest_p;
+		     $L2_state = 2;
+		     $L2_headers = {}; push @mime_parts, {'headers' => [], 'sep' => [], 'body' => []}; # create blank attachment
 		     debug_message sprintf 'DEBUG: attachment %d', scalar @mime_parts if $debug_p;
 		  } elsif ($s =~ /^--$boundary--\r?\n$/s) {
-		     $hold_p = 0;
+		     if ($digest_p) {
+			$blackhole_p = 1;
+		     } else {
+			$hold_p = 0;
+		     }
+		  }
+	       } elsif ($L2_state == 4) { # MIME digest preamble
+		  if ($s =~ /^--$boundary\r?\n$/s) {
+		     $L2_state = 2;
+		     $L2_headers = {}; @mime_parts = ({'headers' => [], 'sep' => [], 'body' => []}); # reinitialize and create blank attachment
+		     debug_message sprintf 'DEBUG: attachment %d', scalar @mime_parts if $debug_p;
+		  } elsif ($s =~ /^--$boundary--\r?\n$/s) { # this should never happen
+		     $blackhole_p = 0;
 		  }
 	       } else {
-		  die "INTERNAL ERROR: mime_state $mime_state not handled!\n";
+		  die "INTERNAL ERROR: L2_state $L2_state not handled!\n";
 	       }
 	       if (!$hold_p) {
 		  debug_message sprintf 'DEBUG: releasing hold and posting article' if $debug_p;
@@ -453,7 +500,7 @@ sub look_at_stdin () {
 printf STDERR "DEBUG: $appName: called with arguments [(%s)]\n", join(') (', @ARGV) if join('', map { "!$_!" } @ARGV) =~ /!(?:-d|--debug)!/; # detect --debug before calling GetOptions
 
 GetOptions(
-   'd|debug'		=> \$debug_p,
+   'd|debug'		=> sub { $debug_p += 1; },
    'k|keep-going'	=> \$keep_going_p,
    'n|dry-run'		=> \$dry_run_p,
    'tag=s'		=> \$tag,
