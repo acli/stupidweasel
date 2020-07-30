@@ -188,8 +188,8 @@ All of I<f_header>, I<f_sep>, and I<f_body> must be closures.
 Any other type of value (including undef) will cause a runtime error.
 =cut
 
-sub scan_mbox_file ($$$$) {
-   my($filename, $f_header, $f_sep, $f_body) = @_;
+sub scan_mbox_file ($$$$$) {
+   my($filename, $f_from_, $f_header, $f_sep, $f_body) = @_;
    my $state = 0;			# State 0 - From_ or header; 1 - header, separator; 3 - body
    my($from_, @headers);
    my $h;
@@ -208,10 +208,11 @@ sub scan_mbox_file ($$$$) {
       } elsif ($state <= 1) {
 	 $state = 1;
 	 if ($s eq "\n") {
-	    for my $header ($from_, @headers) {
-	       &$f_header($header->[0], $filename, $header->[1]);
+	    &$f_from_($from_->[0], $filename, $from_->[1]) if defined $from_ && defined $f_from_;
+	    for my $header (@headers) {
+	       &$f_header($header->[0], $filename, $header->[1]) if defined $f_header;
 	    }
-	    &$f_sep($s, $filename, $.);
+	    &$f_sep($s, $filename, $.) if defined $f_sep;
 	    $state = 3;
 	 } elsif ($s =~ /^\s/s) {
 	    die "$filename: $.: Illegal continuation header\n" unless @headers;
@@ -222,7 +223,7 @@ sub scan_mbox_file ($$$$) {
 	    push @headers, [$s, $.];
 	 }
       } elsif ($state == 3) {
-	 &$f_body($s, $filename, $.);
+	 &$f_body($s, $filename, $.) if defined $f_body;
       } else {
 	 die "$filename: $.: Internal error: Unexpected state $state\n";
       }
@@ -270,76 +271,181 @@ sub known_mailing_lists_for ($) {
    return %newsgroups;
 }
 
+sub determine_newsgroups_from_header_hash ($) {
+   my($headers) = @_;
+   my %newsgroups;
+   for my $candidate ('from', 'to', 'cc', 'delivered-to', 'mailing-list', 'list-id') {
+      my $candidates = get_array($candidate, $headers);
+      if (defined $candidates) {
+	 for my $det (@$candidates) {
+	    my %det = known_mailing_lists_for(extract_possible_email_address_from($det));
+	    for my $group (keys %det) {
+	       $newsgroups{$group} = $det{$group};
+	    }
+	 }
+      }
+   }
+   if (!%newsgroups && (defined $headers->{'list-id'} || defined $headers->{'list-unsubscribe'})) {
+      my $junk = get_scalar('junk', $lists->{''});
+      $junk = 'junk' unless defined $junk;
+      $newsgroups{$junk} = {};
+      debug_message "DEBUG: no lists recognized but List-Id or List-Unsubscribe header found, putting in $junk" if $debug_p;
+   }
+   debug_message sprintf "DEBUG: newsgroups: %s", join(', ', sort keys %newsgroups) if $debug_p;
+   return %newsgroups;
+}
+
+sub post_article_and_leave_OUTPUT_open ($$$$) {
+   my($newsgroups, $headers, $sep, $body) = @_;
+   my @cmdline = ($mailpost, '-d', 'local', sort keys %$newsgroups);
+   if ($dry_run_p) {
+      debug_message sprintf 'Pretending to execute command: %s', join(' ', @cmdline) if $debug_p || $verbose_p;
+      open(OUTPUT, '>', '/dev/null');
+   } else {
+      debug_message sprintf 'Executing command: %s', join(' ', @cmdline) if $debug_p || $verbose_p;
+      flush STDERR;
+      my $st = open(OUTPUT, '|-');
+      die "$appName: $mailpost: fork: $!\n" unless defined $st;
+      if (!$st) {
+	 exec { $cmdline[0] } @cmdline;
+	 die "$appName: $mailpost: exec: $!\n";
+      }
+   }
+   if (defined $headers) {
+      for my $header (@$headers) {
+	 if ($header =~ /^(Status|X-Evolution-[^:]+)\s*:/ || $header =~ /^((?:ARC|X-BHAM-STAMP|DKIM)-[^:]+)\s*:/) {
+	    debug_message "Discarding $1 header" if $debug_p;
+	 } else {
+	    print OUTPUT $header;
+	 }
+      }
+   }
+   if (defined $sep) {
+      for my $s (@$sep) {
+	 print OUTPUT $s;
+      }
+   }
+   if (defined $body) {
+      for my $s (@$body) {
+	 print OUTPUT $s;
+      }
+   }
+}
+
+sub newsgroups_list_is_the_blackhole_p ($) {
+   my($newsgroups) = @_;
+   return defined $newsgroups && keys %$newsgroups == 1 && (keys %$newsgroups)[0] eq '/dev/null';
+}
+
+sub inject_header ($$$;$) {
+   my($s, $headers, $header_dict, $announce_p) = @_; # $s, \@headers, \%headers
+   if ($s =~ /^([^:]+)\s*:\s*(.*?)\s*$/s) {
+      my($key, $val) = (lc $1, $2);
+      if ($val) {
+	 push @$headers, $s;
+	 push @{$header_dict->{$key}}, $val;
+	 debug_message "DEBUG: Injecting $s" if $announce_p && $debug_p;
+      } else {
+	 debug_message "Discarding $key header with no value" if $debug_p;
+      }
+   } else {
+      debug_message "INTERNAL ERROR: Received invalid header \"$s\" from scan_mbox_file" if $debug_p;
+   }
+}
+
 sub look_at_stdin () {
    my(@headers, %headers);
    my %newsgroups;
    my $blackhole_p;
-   scan_mbox_file('-', sub {
+   my($multipart_mixed_p, $boundary, @preamble, @mime_parts, $hold_p, $mime_state);
+   scan_mbox_file('-',
+	 # From_
+	 undef,
+
+	 # headers
+	 sub {
 	    my($s, $filename, $lineno) = @_;
-	    push @headers, $s;
-	    push @{$headers{+lc $1}}, $2 if $s =~ /^([^:]+)\s*:\s*(.*)/s;
+	    inject_header($s, \@headers, \%headers);
+
+	 # separator
 	 }, sub {
 	    my($s, $filename, $lineno) = @_;
 
 	    # Figure out if this came from some mailing list
-	    for my $candidate ('from', 'to', 'cc', 'delivered-to', 'mailing-list', 'list-id') {
-	       if (defined $headers{$candidate}) {
-		  for my $det (@{$headers{$candidate}}) {
-		     my %det = known_mailing_lists_for(extract_possible_email_address_from($det));
-		     for my $group (keys %det) {
-			$newsgroups{$group} = $det{$group};
-		     }
-		  }
-	       }
-	    }
-	    if (!%newsgroups && (defined $headers{'list-id'} || defined $headers{'list-unsubscribe'})) {
-	       my $junk = get_scalar('junk', $lists->{''});
-	       $junk = 'junk' unless defined $junk;
-	       $newsgroups{$junk} = {};
-	       debug_message "DEBUG: no lists recognized but List-Id or List-Unsubscribe header found, putting in $junk" if $debug_p;
-	    }
-	    debug_message sprintf "DEBUG: newsgroups: %s", join(', ', sort keys %newsgroups) if $debug_p;
-	    if (%newsgroups) {
+	    %newsgroups = determine_newsgroups_from_header_hash \%headers;
+	    if (%newsgroups && !newsgroups_list_is_the_blackhole_p(\%newsgroups)) {
 	       # If it didn't come with an Organization header fabricate a reasonable one because having ours in the post makes no sense.
 	       if (!defined $headers{'organization'}) {
-		  # Actually, trying to guess is too hard because there's no standard way to figure out who sent the mail to a list
 		  my $organization = $newsgroups{+(keys(%newsgroups))[0]}->{'organization'};
-		  my $fakeness = sprintf('Organization: %s', ($organization || 'Unknown'));
-		  push @headers, "$fakeness\n";
-		  debug_message "DEBUG: Injecting $fakeness" if $debug_p;
+		  inject_header sprintf('Organization: %s', ($organization || 'Unknown')), \@headers, \%headers, 1;
 	       }
 
-	       # Post the article
-	       my @cmdline = ($mailpost, '-d', 'local', sort keys %newsgroups);
-	       if ($dry_run_p) {
-		  debug_message sprintf 'Pretending to execute command: %s', join(' ', @cmdline) if $debug_p || $verbose_p;
-		  open(OUTPUT, '>', '/dev/null');
+	       # Post the article unless it MIGHT be a MIME digest
+	       if (get_scalar('mime-version', \%headers) eq '1.0'
+			&& get_scalar('content-type', \%headers) =~ /^multipart\/mixed;.*?\bboundary=(["'])?([^\1]+)\1/is) {
+
+		  ($hold_p, $multipart_mixed_p, $boundary) = (1, 1, $2);
+		  debug_message "Delaying article post due to detected multipart/mixed, boundary: $boundary" if $debug_p || $verbose_p;
 	       } else {
-		  debug_message sprintf 'Executing command: %s', join(' ', @cmdline) if $debug_p || $verbose_p;
-		  flush STDERR;
-		  my $st = open(OUTPUT, '|-');
-		  die "$appName: $mailpost: fork: $!\n" unless defined $st;
-		  if (!$st) {
-		     exec { $cmdline[0] } @cmdline;
-		     die "$appName: $mailpost: exec: $!\n" unless defined $st;
-		  }
+		  post_article_and_leave_OUTPUT_open(\%newsgroups, \@headers, [$s], undef);
 	       }
-	       for my $header (@headers) {
-		  if ($header =~ /^(Status|X-Evolution-[^:]+)\s*:/ || $header =~ /^((?:ARC|X-BHAM-STAMP|DKIM)-[^:]+)\s*:/) {
-		     debug_message "Discarding $1 header" if $debug_p;
-		  } else {
-		     print OUTPUT $header;
-		  }
-	       }
-	       print OUTPUT $s;
 	    } else {
 	       debug_message sprintf 'No mailing list detected in input, %s.', ($keep_going_p? 'discarding rest': 'terminating') if $debug_p || $verbose_p;
 	       exit unless $keep_going_p;
 	       $blackhole_p = 1
 	    }
+
+	 # body
 	 }, sub {
 	    my($s, $filename, $lineno) = @_;
-	    print OUTPUT $s unless $blackhole_p;
+	    if ($blackhole_p) {
+	       ;
+	    } elsif (!$hold_p) {
+	       print OUTPUT $s;
+	    } else {
+	       if ($mime_state == 0) { # preamble before blank line
+		  push @preamble, $s;
+		  $mime_state = 1 if $s =~ /^\r?\n$/s;
+	       } elsif ($mime_state == 1) { # preamble after blank line
+		  push @preamble, $s;
+		  if ($s =~ /^--$boundary\r?\n$/s) {
+		     $mime_state = 2;
+		     push @mime_parts, {'headers' => [], 'sep' => [], 'body' => []}; # create blank attachment
+		     debug_message sprintf 'DEBUG: attachment %d', scalar @mime_parts if $debug_p;
+		  } elsif ($s =~ /^--$boundary--\r?\n$/s) {
+		     $hold_p = 0;
+		  }
+	       } elsif ($mime_state == 2) { # attachment header
+		  if ($s =~ /^\r?\n$/s) {
+		     push @{$mime_parts[$#mime_parts]->{'sep'}}, $s;
+		     $mime_state = 3;
+		  } else {
+		     push @mime_parts[$#mime_parts]->{'headers'}, $s;
+		  }
+	       } elsif ($mime_state == 3) { # attachment body
+		  push @{$mime_parts[$#mime_parts]->{'body'}}, $s;
+		  if ($s =~ /^--$boundary\r?\n$/s) {
+		     $mime_state = 2;
+		     push @mime_parts, {'headers' => [], 'sep' => [], 'body' => []}; # create blank attachment
+		     debug_message sprintf 'DEBUG: attachment %d', scalar @mime_parts if $debug_p;
+		  } elsif ($s =~ /^--$boundary--\r?\n$/s) {
+		     $hold_p = 0;
+		  }
+	       } else {
+		  die "INTERNAL ERROR: mime_state $mime_state not handled!\n";
+	       }
+	       if (!$hold_p) {
+		  debug_message sprintf 'DEBUG: releasing hold and posting article' if $debug_p;
+		  post_article_and_leave_OUTPUT_open(\%newsgroups, \@headers, ["\n"], \@preamble);
+		  for my $part (@mime_parts) {
+		     for my $key ('headers', 'sep', 'body') {
+			for my $s (@{$part->{$key}}) {
+			   print OUTPUT $s;
+			}
+		     }
+		  }
+	       }
+	    }
 	 });
    close OUTPUT;
 }
