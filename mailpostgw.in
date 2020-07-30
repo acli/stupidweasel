@@ -370,7 +370,9 @@ sub look_at_stdin () {
    my(@headers, %headers);
    my %newsgroups;
    my $blackhole_p;
-   my($multipart_mixed_p, $boundary, @preamble, @mime_parts, $L2_state, $L2_headers, $L3_state, @L3_headers, $L3_headers, $hold_p, $digest_p);
+   my($multipart_mixed_p, $boundary, @preamble, @mime_parts, $hold_p, $digest_p);
+   my($L2_state, $L2_headers);
+   my($L3_state, $L3_headers, @L3_headers, $L3_partial_header);
    scan_mbox_file('-',
 	 # From_
 	 undef,
@@ -436,7 +438,7 @@ sub look_at_stdin () {
 			my $type = lc $1 if get_scalar('content-type', $L2_headers) =~ /^([^;\s]+)/;
 			if ($type eq 'message/rfc822') {
 			   debug_message sprintf 'DEBUG: posting attachment %d', scalar @mime_parts if $debug_p;
-			   ($L3_state, $L3_headers, @L3_headers) = (0, {}, ());
+			   ($L3_state, $L3_headers, $L3_partial_header, @L3_headers) = (0, {});
 			} else {
 			   debug_message sprintf "DEBUG: ignoring attachment %d of wrong type %s", scalar @mime_parts, $type if $debug_p;
 			}
@@ -459,11 +461,15 @@ sub look_at_stdin () {
 		     } else {
 			if ($L3_state == 0) {			# L3 header or sep
 			   if ($s =~ /^\r?\n$/s) {		# L3 sep
+			      inject_header($L3_partial_header, \@L3_headers, $L3_headers) if defined $L3_partial_header;
 			      inject_organization_header_if_not_present(\%newsgroups, \@L3_headers, $L3_headers);
 			      post_article_and_leave_OUTPUT_open(\%newsgroups, \@L3_headers, [$s], undef);
 			      $L3_state = 1;
-			   } else {				# L3 header
-			      inject_header($s, \@L3_headers, $L3_headers);
+			   } elsif ($s =~ /^\S/) {		# L3 header
+			      inject_header($L3_partial_header, \@L3_headers, $L3_headers) if defined $L3_partial_header;
+			      $L3_partial_header = $s;
+			   } else {				# L3 header continuation
+			      $L3_partial_header .= $s;
 			   }
 			} else {				# L3 body
 			   print OUTPUT $s;
