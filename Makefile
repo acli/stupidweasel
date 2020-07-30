@@ -39,7 +39,7 @@ dat_targets=$(system_dat_targets)
 else
 
 bindir=$(HOME)/bin
-datdir=not supported
+datdir=$(HOME)/.config/stupidweasel
 mandir=$(HOME)/man
 symlinks=
 targets=$(user_bin_targets)

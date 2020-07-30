@@ -31,6 +31,9 @@ use vars qw( $test_p );
 use vars qw( $n );
 use vars qw( $output_path );
 
+use vars qw( $prefer_cr_hack_p );
+$prefer_cr_hack_p = 1;
+
 GetOptions(
   'debug|d' => \$debug_p,
   'dry-run|n' => \$dry_run_p,
@@ -42,6 +45,7 @@ $output_path = $test_p? '/tmp/slgw.out': "/var/mail/$ENV{USER}";
 open(OUTPUT, '>>', $output_path) || die "$output_path: $!\n";
 my($headers, $from);
 my($encoding, $qp_p);
+my($type, $multipart_p);
 for (;;) {
   my $s = scalar <>;
 last unless defined $s;
@@ -57,6 +61,10 @@ last if $s eq "\n";
     $from =~ s/^\s+//s;
     $from =~ s/\s+$//s;
     $from = $1 if $from =~ /\s/ && $from =~ /([^\s\@]+\@[^\s\@]+)/; # XXX
+  } elsif ($s =~ /^Content-Type:\s*([^\s;]+)/is) {
+    $type = lc $1;
+    $multipart_p = $type =~ /^multipart\//;
+    print STDERR "Content-Type detected, type is $type\n" if $debug_p;
   } elsif ($s =~ /^Content-Transfer-Encoding:\s*([^\s;]+)/is) {
     $encoding = lc $1;
     $qp_p = $encoding eq 'quoted-printable';
@@ -72,10 +80,15 @@ if ($n) {
   for (;;) {
     my $s = scalar <>;
   last unless defined $s;
+    $s = "$1$2" if $s =~ /^(.*?)\r(\n)$/s; # apparently Evolution adds \r to literally every single line, but only in the body
     if ($s =~ /^From /s) {
       print STDERR "Bare \"From \" in message body, trying to work around\n" if $debug_p;
       if ($qp_p) {
 	$s =~ s/^F/=46/s;
+      } elsif ($multipart_p) { # do nothing if multipart, on the assumption that mail cannot terminate before the final MIME boundary
+	;
+      } elsif ($prefer_cr_hack_p) {
+	$s = "$1\r$2" if $s =~ /^(.*?[^\r])(\n)$/s; # re-insert \r on the assumption headers cannot end in \r\n
       } else {
 	$s =~ s/^/>/s;
       }
