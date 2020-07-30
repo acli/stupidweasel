@@ -325,7 +325,7 @@ sub look_at_stdin () {
 		  }
 	       }
 	       for my $header (@headers) {
-		  print OUTPUT $header;
+		  print OUTPUT $header unless $header =~ /^(?:Status|X-Evolution-[^:]+|ARC-|X-BHAM-STAMP-|DKIM-):/i;
 	       }
 	       print OUTPUT $s;
 	    } else {
