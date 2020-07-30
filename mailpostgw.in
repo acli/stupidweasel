@@ -325,11 +325,15 @@ sub look_at_stdin () {
 		  }
 	       }
 	       for my $header (@headers) {
-		  print OUTPUT $header unless $header =~ /^(?:Status|X-Evolution-[^:]+)/ || $header =~ /^(?:ARC|X-BHAM-STAMP|DKIM)-[^:]+:/;
+		  if ($header =~ /^(Status|X-Evolution-[^:]+)\s*:/ || $header =~ /^((?:ARC|X-BHAM-STAMP|DKIM)-[^:]+)\s*:/) {
+		     debug_message "Discarding $1 header" if $debug_p;
+		  } else {
+		     print OUTPUT $header;
+		  }
 	       }
 	       print OUTPUT $s;
 	    } else {
-	       debug_message 'No mailing list detected in input.' if $debug_p || $verbose_p;
+	       debug_message sprintf 'No mailing list detected in input, %s.', ($keep_going_p? 'discarding rest': 'terminating') if $debug_p || $verbose_p;
 	       exit unless $keep_going_p;
 	       $blackhole_p = 1
 	    }
