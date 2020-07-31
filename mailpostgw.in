@@ -75,7 +75,7 @@ sub show_usage_then_exit (;$) {
    my($status) = @_;
    my($default_inject, $summary);
    my $h = $status? *STDERR: *STDOUT;
-   $summary = "Inject into news system if post comes from a recognized mailing list";
+   $summary = "Inject mail into news system if it came from a recognized mailing list";
    print $h <<EOF;
 usage: $appName [OPTION] ...
 $summary.
