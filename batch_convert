@@ -90,6 +90,7 @@ sub batch_convert ($) {
 	    my @cmdline = ('mailpostgw', '--tag', "msg $n", '-k');
 	    push @cmdline, '-d' if $debug_p;
 	    push @cmdline, '-n' if $dry_run_p;
+	    push @cmdline, '-p' if $dry_run_p;
 	    push @cmdline, '-v' if $verbose_p;
 	    flush STDERR;
 	    $pipe_opened_p = open OUTPUT, '|-';

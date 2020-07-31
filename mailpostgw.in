@@ -26,6 +26,9 @@ use vars qw( $mailpost $newsuser );
 $mailpost = '@@MAILPOST@@';
 $newsuser = '@@NEWSUSER@@';
 
+use vars qw( $mailing_list_definition_file );
+$mailing_list_definition_file = '@@INPUT@@';
+
 use vars qw( $appName $hostname $id );
 use vars qw( $tag );
 use vars qw( $tag2 );
@@ -36,12 +39,14 @@ use vars qw( @original_argv );
 @original_argv = @ARGV;
 
 $appName = $& if $0 =~ /[^\/]+$/;
-$hostname = `hostname`; chomp $hostname;
+$hostname = -f '/bin/hostname'? '/bin/hostname': '/usr/bin/hostname';
+$hostname = `$hostname`; chomp $hostname;
 
 use vars qw( $debug_p $dry_run_p );
 use vars qw( $force_delete_p );
 use vars qw( $interactive_p );
 use vars qw( $keep_going_p );
+use vars qw( $preserve_uid_p );
 use vars qw( $verbose_p );
 
 $SIG{__DIE__} = sub {
@@ -61,14 +66,16 @@ sub show_usage_then_exit (;$) {
 usage: $appName [OPTION] ...
 $summary.
 
-  -d, --debug        enable debugging messages
-  -i, --interactive  prompt before every removal
-  -k, --keep-going   always keep reading until eof (INTERNAL USE ONLY)
-  -n, --dry-run      do not actually modify the outbox
-      --tag=TAG      tag debug messages with given TAG (INTERNAL USE ONLY)
-  -v, --verbose      use long-form queue listings and show a little more detail
-      --help         show this help and exit
-      --version      output version information and exit
+      --data-from=FILE  use mailing list definitions (lists.dat) from FILE
+  -d, --debug           enable debugging messages
+  -i, --interactive     prompt before every removal
+  -k, --keep-going      always keep reading until eof (INTERNAL USE ONLY)
+  -n, --dry-run         do not actually modify the outbox
+      --preserve-uid    do not sudo to $newsuser (TESTING USE ONLY)
+      --tag=TAG         tag debug messages with given TAG (INTERNAL USE ONLY)
+  -v, --verbose         explain what is being done
+      --help            show this help and exit
+      --version         output version information and exit
 
 Report bugs to <https://github.com/acli/stupidweasel/issues>.
 EOF
@@ -82,12 +89,13 @@ sub debug_message ($) {
    $prefix .= "$tag2: " if defined $tag2;
    chomp $msg;
    print STDERR "$prefix$msg\n";
+   flush STDERR;
 }
 
 sub check_for_correct_user () {
    my $correct_uid = (getpwnam($newsuser))[2];
    debug_message "DEBUG: current uid is $<, euid $>; expecting uid $correct_uid" if $debug_p;
-   if ($> != $correct_uid) {
+   if ($> != $correct_uid && !$preserve_uid_p) {
       my $flag = 'MAILPOSTGW_WAS_HERE';
       die "$appName: Failed to switch uid to $newsuser\n" if defined $ENV{$flag};
       my @cmd = ('sudo', '-n', '-u', $newsuser, '--', $0, @original_argv);
@@ -239,7 +247,7 @@ sub read_localgroups () {
 }
 
 sub read_config_file () {
-   my $input = '@@INPUT@@';
+   my $input = $mailing_list_definition_file;
    open INPUT, '<', $input || die "$input: $!\n";
    $lists = read_data INPUT;
    close INPUT;
@@ -263,7 +271,7 @@ sub known_mailing_lists_for ($) {
 	       debug_message "DEBUG: $det matches $chk" if $debug_p;
 	       for my $groups (get_array('localgroup', $list)) {
 		  for my $group (@$groups) {
-		     $newsgroups{$group} = { 'organization' => get_scalar('organization', $list) };
+		     $newsgroups{$group} = { 'list', $list };
 		  }
 	       }
 	    }
@@ -408,8 +416,39 @@ sub inject_organization_header_if_not_present ($$$) {
    my($newsgroups, $headers, $header_dict) = @_; # \%newsgroups, \@headers, \%headers
    my $it;
    if (!defined $header_dict->{'organization'}) {
-      my $organization = $newsgroups->{+(keys(%$newsgroups))[0]}->{'organization'};
+      my $organization = get_scalar('organization', $newsgroups->{+(keys(%$newsgroups))[0]}->{'list'});
       $it = inject_header sprintf("Organization: %s\n", ($organization || 'Unknown')), $headers, $header_dict, 1;
+   }
+   return $it;
+}
+
+sub remove_header ($$$) {
+   my($key, $headers, $header_dict) = @_; # $key, \@headers, \%headers
+   my $re = sprintf('^%s:', quotemeta($key));
+   my $n;
+   for (my $j = scalar(@$headers); $j; $j -= 1) {
+      my $i = $j - 1;
+      if ($headers->[$i] =~ /$re/) {
+	 splice @$headers, $i, 1;
+	 $n += 1;
+      }
+   }
+   delete $header_dict->{$key};
+   debug_message "$n \"$key\" header(s) removed" if $debug_p;
+}
+
+sub remove_tag_from_subject_header ($$$) {
+   my($newsgroups, $headers, $header_dict) = @_; # \%newsgroups, \@headers, \%headers
+   my $it;
+   my $subject = get_scalar('subject', $header_dict);
+   my $tags = get_array('tag', $newsgroups->{+(keys(%$newsgroups))[0]}->{'list'});
+   if ($subject && $tags) {
+      for my $tag (@$tags) {
+	 my $re = quotemeta($tag) . '\s+';
+	 $subject =~ s/$re//gs;
+      }
+      remove_header('Subject', $headers, $header_dict);
+      $it = inject_header "Subject: $subject\n", $headers, $header_dict, 1;
    }
    return $it;
 }
@@ -441,6 +480,9 @@ sub look_at_stdin () {
 	    if (%newsgroups && !newsgroups_list_is_the_blackhole_p(\%newsgroups)) {
 	       # If it didn't come with an Organization header fabricate a reasonable one because having ours in the post makes no sense.
 	       inject_organization_header_if_not_present(\%newsgroups, \@headers, \%headers);
+
+	       # If the mailing list uses a tag in the subject header, remove it
+	       remove_tag_from_subject_header(\%newsgroups, \@headers, \%headers);
 
 	       # Post the article unless it MIGHT be a MIME digest
 	       if (get_scalar('mime-version', \%headers) eq '1.0'
@@ -517,6 +559,7 @@ sub look_at_stdin () {
 			   if ($s =~ /^\r?\n$/s) {		# L3 sep
 			      inject_header($L3_partial_header, \@L3_headers, $L3_headers) if defined $L3_partial_header;
 			      inject_organization_header_if_not_present(\%newsgroups, \@L3_headers, $L3_headers);
+			      remove_tag_from_subject_header(\%newsgroups, \@L3_headers, $L3_headers);
 			      post_article_and_leave_OUTPUT_open(\%newsgroups, \@L3_headers, [$s], undef);
 			      $L3_state = 1;
 			   } elsif ($s =~ /^\S/) {		# L3 header
@@ -574,9 +617,11 @@ sub look_at_stdin () {
 printf STDERR "DEBUG: $appName: called with arguments [(%s)]\n", join(') (', @ARGV) if join('', map { "!$_!" } @ARGV) =~ /!(?:-d|--debug)!/; # detect --debug before calling GetOptions
 
 GetOptions(
+   'data-from=s'	=> \$mailing_list_definition_file,
    'd|debug'		=> sub { $debug_p += 1; },
    'k|keep-going'	=> \$keep_going_p,
    'n|dry-run'		=> \$dry_run_p,
+   'preserve-uid'	=> \$preserve_uid_p,
    'tag=s'		=> \$tag,
    'v|verbose'		=> \$verbose_p,
    'help'		=> \&show_usage_then_exit,
