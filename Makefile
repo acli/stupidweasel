@@ -76,7 +76,7 @@ $(mandir)/man8/%: %
 	install -m 644 $< $@
 
 mailpostgw: mailpostgw.in
-	sed -e 's|@@NEWSUSER@@|$(mailpost_as)|g' -e 's|@@MAILPOST@@|$(mailpost)|g' -e 's|@@INPUT@@|$(datdir)/lists.dat|g' < $< > $@
+	sed -e 's|@@NEWSUSER@@|$(mailpost_as)|g' -e 's|@@MAILPOST@@|$(mailpost)|g' -e 's|@@INPUT@@|$(datdir)/lists.dat|g' < $< > $@ && perl -Tcw $@
 	
 %.chk: %
 	perl -Tcw $<
