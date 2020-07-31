@@ -302,7 +302,6 @@ sub post_article_and_leave_OUTPUT_open ($$$$) {
    my @cmdline = (
 	    $mailpost,
 	       '-d', 'local',
-	       '-z', 'Status:X-Evolution-*:ARC-*:X-BHAM-STAMP-*:DKIM-*:X-IPAS-*:X-IronPort-*',
 	       sort keys %$newsgroups
 	 );
 
@@ -382,7 +381,15 @@ sub inject_header ($$$;$) {
    my($s, $headers, $header_dict, $announce_p) = @_; # $s, \@headers, \%headers
    if ($s =~ /^([^:]+)\s*:\s*(.*?)\s*$/s) {
       my($key, $val) = ($1, sanitize_header $2);
-      if ($val) {
+      if ($key =~ /^(?:Status$|X-Evolution-)/i) {
+	 debug_message "DEBUG: Discarding meaningless header $s" if $debug_p > 1;
+	 undef $s;
+      } elsif ($key =~ /^(?:(?:ARC|X-BHAM-STAMP|DKIM|X-IPAS|IronPort|X-IronPort)-)/
+	    || $key =~ /^(?:X-Google-DKIM-Signature|Received-SPF)$/) {
+
+	 debug_message "DEBUG: Discarding unwanted header $s" if $debug_p > 1;
+	 undef $s;
+      } elsif ($val) {
 	 push @$headers, "$key: $val\n";
 	 push @{$header_dict->{+lc $key}}, $val;
 	 debug_message "DEBUG: Injecting $s" if $announce_p && $debug_p;
