@@ -269,7 +269,7 @@ sub known_mailing_lists_for ($) {
 	       debug_message "DEBUG: $det matches $chk" if $debug_p;
 	       for my $groups (get_array('localgroup', $list)) {
 		  for my $group (@$groups) {
-		     $newsgroups{$group} = { 'list', $list };
+		     $newsgroups{$group} = { 'list' => $list };
 		  }
 	       }
 	    }
@@ -296,7 +296,7 @@ sub determine_newsgroups_from_header_hash ($) {
    if (!%newsgroups && (defined $headers->{'list-id'} || defined $headers->{'list-unsubscribe'})) {
       my $junk = get_scalar('junk', $lists->{''});
       $junk = 'junk' unless defined $junk;
-      $newsgroups{$junk} = {};
+      $newsgroups{$junk} = { 'list' => $lists->{''} };
       debug_message "DEBUG: no lists recognized but List-Id or List-Unsubscribe header found, putting in $junk" if $debug_p;
    }
    debug_message sprintf "DEBUG: newsgroups: %s", join(', ', sort keys %newsgroups) if $debug_p;
