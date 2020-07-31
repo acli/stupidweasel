@@ -96,6 +96,7 @@ sub check_for_correct_user () {
    if ($> != $correct_uid && !$preserve_uid_p) {
       my $flag = 'MAILPOSTGW_WAS_HERE';
       die "$appName: Failed to switch uid to $newsuser\n" if defined $ENV{$flag};
+      $ENV{$flag} = '1';
       my @cmd = ('sudo', '-n', '-u', $newsuser, '--', $0, @original_argv);
       debug_message sprintf 'Executing command: %s', join(' ', @cmd) if $debug_p || $verbose_p;
       flush STDERR;
