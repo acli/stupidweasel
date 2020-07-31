@@ -241,9 +241,6 @@ sub scan_mbox_file ($$$$$) {
 
 ## END OF STOLEN STUFF ################################################
 
-sub read_localgroups () {
-}
-
 sub read_config_file () {
    my $input = $mailing_list_definition_file;
    open INPUT, '<', $input || die "$input: $!\n";
