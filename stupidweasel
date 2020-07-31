@@ -13,6 +13,7 @@ use integer;
 
 use Getopt::Long qw(:config no_auto_abbrev bundling);
 use POSIX;
+use Sys::Hostname;
 
 use v5.14; # //u modifier
 use utf8;
@@ -38,7 +39,7 @@ use vars qw( %targets );
 use vars qw( $status );
 
 $appName = $& if $0 =~ /[^\/]+$/;
-$hostname = `hostname`; chomp $hostname;
+$hostname = hostname;
 
 $id = sprintf('%d.%d.%s', time, $$, $hostname);
 $tmp = "$outbox/tmp/$id";
