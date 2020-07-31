@@ -54,11 +54,15 @@ check: $(addsuffix .chk,$(targets))
 
 doc: stupidweasel.8
 
-install: $(addprefix $(bindir)/,$(targets)) \
-	$(mandir)/man8 \
+all_targets=$(addprefix $(bindir)/,$(targets)) \
 	$(addprefix $(datdir)/,$(dat_targets)) \
 	$(addprefix $(mandir)/man8/,$(man8_targets))
+
+install: $(all_targets)
 	for i in $(symlinks); do (cd $(bindir) && if [ ! -f "$$i" ]; then ln -sf stupidweasel "$$i"; elif [ ! -L "$$i" ]; then echo "$$i not installed because it is a file" >&2; elif [ stupidweasel != "`readlink "$$i"`" ]; then echo "$$i not installed because it is a symlink to a different command" >&2; fi ); done
+
+uninstall:
+	rm -f $(all_targets)
 
 $(bindir)/%: %
 	perl -Tcw $< && install -m 755 $< $@
@@ -72,8 +76,8 @@ $(datdir)/%: %
 $(mandir)/man8:
 	mkdir -p $@
 
-$(mandir)/man8/%: %
-	install -m 644 $< $@
+$(mandir)/man8/%: $(mandir)/man8 %
+	install -m 644 $* $@
 
 mailpostgw: mailpostgw.in
 	sed -e 's|@@NEWSUSER@@|$(mailpost_as)|g' -e 's|@@MAILPOST@@|$(mailpost)|g' -e 's|@@INPUT@@|$(datdir)/lists.dat|g' < $< > $@ && perl -Tcw $@
@@ -85,4 +89,4 @@ mailpostgw: mailpostgw.in
 	perl -nle 'print /^(=head1)(.*)/s? "$$1\U$$2": $$_' $< | pod2man --utf8 --section 8 -c 'System Management Manual' -n "$(shell echo "$*"|tr '[:lower:]' '[:upper:]')" > $@
 
 .DELETE_ON_ERROR:
-.PHONEY: all check doc install
+.PHONEY: all check doc install uninstall
