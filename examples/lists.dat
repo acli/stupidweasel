@@ -1,0 +1,208 @@
+junk = local.misc.announce
+
+######################################################################
+#
+# Normal mailing lists
+
+[SuperCollider users mailing list]
+address = sc-users@lists.bham.ac.uk
+id = sc-users.create.ucsb.edu
+localgroup = local.art.music.sc.users
+tag = [sc-users]
+
+[Koha development]
+address = koha-devel@lists.koha-community.org
+id = koha-devel.lists.koha-community.org
+localgroup = local.comp.koha.devel
+tag = [Koha-devel]
+
+[Bug reports for the GNU m4 macro processor]
+address= bug-m4@gnu.org
+id = bug-m4.gnu.org
+localgroup = local.comp.gnu.m4.bugs
+
+[Discussion of Numerical Python]
+address = numpy-discussion@python.org
+id = numpy-discussion.python.org
+localgroup = local.comp.numpy.discussion
+tag = [Numpy-discussion]
+
+[General discussion relating to Squid]
+address = squid-users@lists.squid-cache.org
+address = squid-users@squid-cache.org
+id = squid-users.lists.squid-cache.org
+localgroup = local.comp.squid.users
+tag = [squid-users]
+
+[Trac users]
+address = trac-users@googlegroups.com
+id = trac-users.googlegroups.com
+localgroup = local.comp.trac.users
+
+[W3C CJK i18n public list]
+address = public-i18n-cjk@w3.org
+id = public-i18n-cjk.w3.org
+localgroup = local.comp.www.cjk.i18n.public
+
+[WWW style]
+address = www-style@w3.org
+id = www-style.w3.org
+localgroup = local.comp.www.style
+
+[Xfce general discussion list]
+address = xfce@xfce.org
+id = xfce.xfce.org
+localgroup = local.comp.xfce
+
+[Xfce development list]
+address = xfce4-dev@xfce.org
+id = xfce4-dev.xfce.org
+localgroup = local.comp.xfce.4.dev
+
+[Copyediting-l]
+address = copyediting-l@list.indiana.edu
+id = copyediting-l.list.indiana.edu
+localgroup = local.art.text.copyediting.l
+tag = [CE-L]
+
+######################################################################
+#
+# Weird (Mailchimp style) read-only lists from trade associations
+
+[AIGA Communiqué]
+address = news@aiga.org
+id = 5966928df412a13bb219de655.40113.list-id.mcsv.net
+localgroup = local.art.design.announce
+organization = American Institute of Graphic Arts
+
+[AIGA DECalog]
+address = info@designeducators.aiga.org
+id = 68b73ba046.10025.list-id.mcsv.net
+localgroup = local.art.design.announce
+organization = American Institute of Graphic Arts
+
+[AIGA Eye on Design]
+address = submit@aiga.org
+id = a3bec656cf107f28badfef481.71045.list-id.mcsv.net
+localgroup = local.art.design.announce
+organization = American Institute of Graphic Arts
+
+[AIGA Arizona]
+address = newsletter@arizona.aiga.org
+id = fb9deb0302.62269.list-id.mcsv.net
+localgroup = local.art.design.announce
+organization = American Institute of Graphic Arts, Arizona chapter
+
+[Craft Flash]
+address = communications@craftontario.com
+id = e283637a87e60a65baf9c5e25.228269.list-id.mcsv.net
+localgroup = local.art.design.announce
+organization = Craft Ontario
+
+[Graphic Artists Guild]
+address = info@graphicartistsguild.org
+id = fd30b5ab33b436908ddd1b922.5795.list-id.mcsv.net
+organization = Graphic Artists Guild
+
+[Editors Canada members' discussion list.]
+address = eac-acr-l@lists.editors.ca
+localgroup = local.art.text.eac-acr.l
+tag = [Eac-acr-l]
+
+[Editors Toronto]
+# address = toronto@editors.ca
+id = 9b82e896f4ce9daad21c3074d.334297.list-id.mcsv.net
+localgroup = local.art.text.eac-acr.toronto.announce
+organization = Editors Toronto
+
+[IEEE]
+address = ieee@deliver.ieee.org
+# no ID
+localgroup = local.comp.ieee.announce
+organization = Institute of Electrical and Electronic Engineers
+
+[IEEE Computer Society]
+address = csconnection@computer.org
+# no ID
+localgroup = local.comp.ieee.announce
+organization = Institute of Electrical and Electronic Engineers
+
+[IEEE Comsoc]
+address = noreply@comsoc.org
+id = 52f2719e3caf956945fef4cda.31125.list-id.mcsv.net
+localgroup = local.comp.ieee.announce
+organization = Institute of Electrical and Electronic Engineers
+
+[IEEE eNotice]
+address = enotice@enotice.ieee.org
+# no ID
+localgroup = local.comp.ieee.announce
+organization = Institute of Electrical and Electronic Engineers
+
+[IEEE Professional Communication Society]
+address = ieee-procomm@deliver.ieee.org
+# no ID
+localgroup = local.art.text.ieee-procomm.announce
+localgroup = local.comp.ieee.announce
+organization = Institute of Electrical and Electronic Engineers
+
+[IEEE Spectrum]
+address = ieee-spectrum@deliver.ieee.org
+# no ID
+localgroup = local.comp.ieee.announce
+organization = Institute of Electrical and Electronic Engineers
+
+[IEEE Spectrum sponsored content]
+address = announcements@naylormarketing.com
+# no ID
+localgroup = local.comp.ieee.announce
+organization = Naylor Association Solutions
+
+[IEEE Standards Association]
+address = ieeestandards@ieee.org
+# no ID
+localgroup = local.comp.ieee.announce
+organization = Institute of Electrical and Electronic Engineers
+
+[RGD Word]
+address = rgdword@rgd.ca
+id = 9347f41331bfe2dcbb310800f.151073.list-id.mcsv.net
+localgroup = local.art.design.announce
+organization = Association of Registered Graphic Designers
+
+######################################################################
+#
+# Weird (Mailchimp style) read-only lists from all levels of government
+
+[Toronto Public Library]
+address = notifications@torontopubliclibrary.ca
+localgroup = local.government.announce
+organization = Toronto Public Library
+
+######################################################################
+#
+# Weird (Mailchimp style) read-only lists from other sources
+
+[CBC]
+address = info@newsletters.cbc.ca
+localgroup = local.politics.announce
+organization = Canadian Broadcasting Corporation
+
+######################################################################
+#
+# Real junk with some sort of mailing list signature
+
+[Facebook notifications]
+address = notification@facebookmail.com
+localgroup = /dev/null
+
+[LinkedIn notifications]
+address = invitations@linkedin.com
+address = member@linkedin.com
+address = messaging-digest-noreply@linkedin.com
+address = notifications-noreply@linkedin.com
+localgroup = /dev/null
+
+[WordPress notifications]
+address = comment-reply@wordpress.com
+localgroup = /dev/null
