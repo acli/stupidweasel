@@ -299,7 +299,13 @@ sub determine_newsgroups_from_header_hash ($) {
 
 sub post_article_and_leave_OUTPUT_open ($$$$) {
    my($newsgroups, $headers, $sep, $body) = @_;
-   my @cmdline = ($mailpost, '-d', 'local', sort keys %$newsgroups);
+   my @cmdline = (
+	    $mailpost,
+	       '-d', 'local',
+	       '-z', 'Status:X-Evolution-*:ARC-*:X-BHAM-STAMP-*:DKIM-*:X-IPAS-*:X-IronPort-*',
+	       sort keys %$newsgroups
+	 );
+
    if ($dry_run_p) {
       debug_message sprintf 'Pretending to execute command: %s', join(' ', @cmdline) if $debug_p || $verbose_p;
       open(OUTPUT, ($debug_p > 1? '>&STDERR': '>/dev/null'));
@@ -315,11 +321,7 @@ sub post_article_and_leave_OUTPUT_open ($$$$) {
    }
    if (defined $headers) {
       for my $header (@$headers) {
-	 if ($header =~ /^(Status|X-Evolution-[^:]+)\s*:/ || $header =~ /^((?:ARC|X-BHAM-STAMP|DKIM|X-IPAS|X-IronPort)-[^:]+)\s*:/) {
-	    debug_message "Discarding $1 header" if $debug_p;
-	 } else {
-	    print OUTPUT $header;
-	 }
+	 print OUTPUT $header;
       }
    }
    if (defined $sep) {
@@ -345,6 +347,12 @@ sub decode_qp ($) {
    return $s;
 }
 
+sub strip_carriage_return_from ($) {
+   my($s) = @_;
+   $s = "$1$2" if $s =~ /^(.*?)\r(\n)$/s;
+   return $s;
+}
+
 sub sanitize_header ($) {
    my($s0) = @_;
    my $s;
@@ -357,7 +365,7 @@ sub sanitize_header ($) {
 	 if ($decoded =~ /^[\040-\176]*$/s && $decoded !~ /(?:"|\?=)/s) {
 	    $s .= $before . $decoded;
 	    $s0 = $after;
-	    debug_message "replacing ($item) with ($decoded)" if $debug_p;
+	    debug_message "replacing ($item) with ($decoded)" if $debug_p > 2;
 	 } else {
 	    $s .= $before . $item;
 	    $s0 = $after;
@@ -413,11 +421,13 @@ sub look_at_stdin () {
 	 # headers
 	 sub {
 	    my($s, $filename, $lineno) = @_;
+	    $s = strip_carriage_return_from $s;
 	    inject_header($s, \@headers, \%headers);
 
 	 # separator
 	 }, sub {
 	    my($s, $filename, $lineno) = @_;
+	    $s = strip_carriage_return_from $s;
 
 	    # Figure out if this came from some mailing list
 	    %newsgroups = determine_newsgroups_from_header_hash \%headers;
@@ -443,6 +453,7 @@ sub look_at_stdin () {
 	 # body
 	 }, sub {
 	    my($s, $filename, $lineno) = @_;
+	    $s = strip_carriage_return_from $s;
 	    if ($blackhole_p) {
 	       ;
 	    } elsif (!$hold_p && !$digest_p) {
