@@ -119,6 +119,8 @@ the per-user local mailbox.
 Because the mbox format has trouble with lines starting with “From ”,
 F<slgw> tries to compensate either by changing the F to =46
 or inserting a > sign before the F.
+The latter workaround is not done if the mail it receives
+is a multipart mail.
 
 =head1 Options
 

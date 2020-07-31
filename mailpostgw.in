@@ -6,6 +6,23 @@
 
 mailpostgw - mailpost gateway
 
+=head1 Synopsis
+
+B<mailpostgw>
+[ B<-k> ]
+[ B<-n> ]
+[ B<-v> ]
+[ B<--data-from=>I<file> ]
+[ B<--debug> ]
+[ B<--keep-going> ]
+[ B<--dry-run> ]
+[ B<--preserve-uid> ]
+[ B<--tag=>I<tag> ]
+[ B<--verbose> ]
+
+B<mailpostgw> B<--help>
+
+B<mailpostgw> B<--version>
 =cut
 # Copyright ©2020 by Ambrose Li <ambrose.li@gmail.com>
 
@@ -42,7 +59,6 @@ $appName = $& if $0 =~ /[^\/]+$/;
 
 use vars qw( $debug_p $dry_run_p );
 use vars qw( $force_delete_p );
-use vars qw( $interactive_p );
 use vars qw( $keep_going_p );
 use vars qw( $preserve_uid_p );
 use vars qw( $verbose_p );
@@ -66,7 +82,6 @@ $summary.
 
       --data-from=FILE  use mailing list definitions (lists.dat) from FILE
   -d, --debug           enable debugging messages
-  -i, --interactive     prompt before every removal
   -k, --keep-going      always keep reading until eof (INTERNAL USE ONLY)
   -n, --dry-run         do not actually modify the outbox
       --preserve-uid    do not sudo to $newsuser (TESTING USE ONLY)
@@ -107,22 +122,6 @@ sub check_for_correct_user () {
 
 ## BEGIN: STOLEN STUFF FROM STUPIDWEASEL ################################################
 
-=head2 read_data, get_scalar, get_array – reading ini files
-
-The three functions read_data, get_scalar and get_array do generic ini file reading
-and come from my other projects (that’s why the data structure read_data builds looks so odd).
-
-read_data takes a filehandle of an ini file and builds a hash of hashes of arrays that represents the file.
-The first-level hash represents sections in the ini file where the keys are the names of the sections.
-
-get_scalar takes a key and a section hash and returns a string representing
-the first value indexed with the given key in the given section
-(undef is returned if no key-value pair with the given key exists).
-
-get_array does the same thing as get_scalar except it returns an array representing
-all values indexed with the given key.
-=cut
-
 sub read_data (;*) {
    my($h) = @_;
    my $it;
@@ -158,15 +157,6 @@ sub get_array ($$) {
    return !(defined $datum && defined $datum->{$key})? undef: $datum->{$key};
 }
 
-=head1 Internals
-
-=head2 looks_like_email_address_p (...)
-
-looks_like_email_address_p takes an array of strings
-and determines if I<all> of the strings look like valid email addresses.
-It returns 1 if they all look valid, 0 otherwise.
-=cut
-
 sub looks_like_email_address_p {
    my $it = 1; # assume it's true then disprove it
    for my $s (@_) {
@@ -181,21 +171,6 @@ for my $test (qw( abc@example.com abc.def@u-example.de abc.def-ghi@ocad.on.ca ))
 for my $test (qw( abc@ @u-example.de @ foo )) {
    die "Test case $test failed" unless !looks_like_email_address_p $test;
 }
-
-=head2 scan_mbox_file( I<filename>, I<f_from_>, I<f_header>, I<f_sep>, I<f_body> )
-
-scan_mbox_file is a general-purpose deterministic finite-state machine
-for reading mails that are in maildir format.
-It opens the given I<filename> for reading,
-then for each line read call either I<f_from_>, I<f_header>, I<f_sep>, or I<f_body>
-depending on whether it’s processing input in the From_ pseudo-header,
-a real RFC822 header,
-the blank line between the header and body,
-or the (RFC822) body of the mail.
-
-All of I<f_header>, I<f_sep>, and I<f_body> must be closures.
-Any other type of value (including undef) will cause a runtime error.
-=cut
 
 sub scan_mbox_file ($$$$$) {
    my($filename, $f_from_, $f_header, $f_sep, $f_body) = @_;
@@ -644,16 +619,31 @@ If it detects a recognized mailing list,
 it creates a pipe to L<mailpost> to send the headers, then continues to pipe the rest of the mail to L<mailpost>;
 if no mailing list is detected it simply exits.
 
-=head1 Bugs
+F<mailpostgw> uses a ini-style configuration file, L<lists.dat(5)>, to determine
+how what addresses and List-Id’s should be fed into which newsgroups.
+You can specify what tags should be removed from the Subject header and,
+in case of read-only broadcast lists, you can specify what should go into the Organization header.
 
-MIME digests (e.g., as sent by CE-L) are not correctly handled.
-If the real L<mailpost(8)> isn’t correctly handling them
-we’ll have to break up the MIME parts ourselves.
+=head1 Files
+
+=over
+
+=item @@MAILPOST@@
+
+The real mailpost script (that needs to be run as the I<@@NEWSUSER@@> user), from INN
+
+=item @@INPUT@@
+
+A map of how mailing lists you receive should be fed into your local news spool
+
+=back
 
 =head1 See also
 
+L<lists.dat>,
 L<mailpost(8)>,
-L<stupidweasel(8)>
+L<stupidweasel(8)>,
+L<sudo(8)>
 
 =head1 Reporting bugs
 
