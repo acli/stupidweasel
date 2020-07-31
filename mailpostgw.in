@@ -1,4 +1,4 @@
-#!/usr/bin/perl
+#!/usr/bin/perl -T
 # vi: set sw=3 ai sm:
 =encoding UTF-8
 
