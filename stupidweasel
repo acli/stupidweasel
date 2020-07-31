@@ -11,7 +11,7 @@ stupidweasel – stupid hack to weasel your mails out into the real world
 use strict;
 use integer;
 
-use Getopt::Long qw(:config no_auto_abbrev bundling);
+use Getopt::Long qw(:config no_auto_abbrev bundling no_ignore_case);
 use POSIX;
 use Sys::Hostname;
 
@@ -147,7 +147,7 @@ $summary.
   -n, --dry-run      do not actually modify the outbox
   -q, --list         list queued emails in outbox$default_list
   -t, --add          add email in standard input to outbox$default_add
-  -v, --verbose      use long-form queue listings and show a little more detail
+  -v, --verbose      explain what is being done
       --help         show this help and exit
       --version      output version information and exit
 
@@ -302,13 +302,14 @@ sub read_evolution_sources () {
    closedir SOURCES;
 }
 
-=head2 scan_mbox_file( I<filename>, I<f_header>, I<f_sep>, I<f_body> )
+=head2 scan_mbox_file( I<filename>, I<f_from_>, I<f_header>, I<f_sep>, I<f_body> )
 
 scan_mbox_file is a general-purpose deterministic finite-state machine
 for reading mails that are in maildir format.
 It opens the given I<filename> for reading,
-then for each line read call either I<f_header>, I<f_sep>, or I<f_body>
-depending on whether it’s processing input in the (RFC822) header,
+then for each line read call either I<f_from_>, I<f_header>, I<f_sep>, or I<f_body>
+depending on whether it’s processing input in the From_ pseudo-header,
+a real RFC822 header,
 the blank line between the header and body,
 or the (RFC822) body of the mail.
 
@@ -316,8 +317,8 @@ All of I<f_header>, I<f_sep>, and I<f_body> must be closures.
 Any other type of value (including undef) will cause a runtime error.
 =cut
 
-sub scan_mbox_file ($$$$) {
-   my($filename, $f_header, $f_sep, $f_body) = @_;
+sub scan_mbox_file ($$$$$) {
+   my($filename, $f_from_, $f_header, $f_sep, $f_body) = @_;
    my $state = 0;			# State 0 - From_ or header; 1 - header, separator; 3 - body
    my($from_, @headers);
    my $h;
@@ -336,13 +337,14 @@ sub scan_mbox_file ($$$$) {
       } elsif ($state <= 1) {
 	 $state = 1;
 	 if ($s eq "\n") {
-	    for my $header ($from_, @headers) {
-	       &$f_header($header->[0], $filename, $header->[1]);
+	    &$f_from_($from_->[0], $filename, $from_->[1]) if defined $from_ && defined $f_from_;
+	    for my $header (@headers) {
+	       &$f_header($header->[0], $filename, $header->[1]) if defined $f_header;
 	    }
-	    &$f_sep($s, $filename, $.);
+	    &$f_sep($s, $filename, $.) if defined $f_sep;
 	    $state = 3;
 	 } elsif ($s =~ /^\s/s) {
-	    die "$filename: $.: Illegal continuation header\n" unless @headers;
+	    die "$filename: $.: Illegal continuation header \"$s\"\n" unless @headers;
 	    $headers[$#headers]->[0] .= $s;
 	 } elsif ($s !~ /:/s) {
 	    die "$filename: $.: Malformed header, no colon\n";
@@ -350,7 +352,7 @@ sub scan_mbox_file ($$$$) {
 	    push @headers, [$s, $.];
 	 }
       } elsif ($state == 3) {
-	 &$f_body($s, $filename, $.);
+	 &$f_body($s, $filename, $.) if defined $f_body;
       } else {
 	 die "$filename: $.: Internal error: Unexpected state $state\n";
       }
@@ -382,7 +384,8 @@ sub display_outbox_summary () {
 	 my $evolution_identity;
 	 if (!$deleted) {
 	    my($date, $from, $to, $user_agent);
-	    scan_mbox_file($candidate, sub {
+	    scan_mbox_file($candidate, undef, # discard From_
+		  sub {
 		     my($s, $filename, $lineno) = @_;
 		     if ($s =~ /^From:.*<([^<>]*)>/is || $s =~ /^From:\s*(\S+?)\s*\(.*?\)\s*$/is || $s =~ /^From:\s*(\S+)\s*$/is) {
 			$from = $1;
@@ -503,7 +506,8 @@ sub copy_stdin_to_outbox () {
    warn "$appName: -N option ignored because we have no control over DSN\n" if ($verbose_p || $debug_p) && (join(',', sort keys %dsn_option) ne 'delay,failure');
    my($from, $uid);
    sub check_for_valid_uid ($) { my($uid) = @_; die "$appName: From header not detected or sender not valid\n" unless defined $uid; }
-   scan_mbox_file('-', sub {
+   scan_mbox_file('-', undef, # discard From_
+	 sub {
 	    my($s, $filename, $lineno) = @_;
 	    if ($s =~ /^From:.*<([^<>]*)>/is || $s =~ /^From:\s*(\S+?)\s*\(.*?\)\s*$/is || $s =~ /^From:\s*(\S+)\s*$/is) {
 	       $from = $1;
