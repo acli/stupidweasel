@@ -53,7 +53,9 @@ use vars qw( $status );
 use vars qw( %localgroups $lists );
 
 use vars qw( @original_argv );
-@original_argv = @ARGV;
+@original_argv = map { $1 if /^(.*)$/ } @ARGV; # untaint
+
+$ENV{'PATH'} = '/bin:/usr/bin:/sbin:/usr/sbin:/usr/local/bin:/usr/local/sbin';
 
 $appName = $& if $0 =~ /[^\/]+$/;
 
@@ -112,7 +114,8 @@ sub check_for_correct_user () {
       my $flag = 'MAILPOSTGW_WAS_HERE';
       die "$appName: Failed to switch uid to $newsuser\n" if defined $ENV{$flag};
       $ENV{$flag} = '1';
-      my @cmd = ('sudo', '-n', '-u', $newsuser, '--', $0, @original_argv);
+      my $self = $1 if $0 =~ /^(.*)$/; # untaint
+      my @cmd = ('@@SUDO@@', '-n', '-u', $newsuser, '--', $self, @original_argv);
       debug_message sprintf 'Executing command: %s', join(' ', @cmd) if $debug_p || $verbose_p;
       flush STDERR;
       exec { $cmd[0] } @cmd;
