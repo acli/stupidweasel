@@ -610,16 +610,22 @@ exit $status;
 
 =head1 Description
 
-F<mailpostgw> uses Evolution’s filter feature to simulate mail delivery to a pipe,
-so that INN’s L<mailpost(8)> mail-to-news gateway can function on a system with no functional L<sendmail(8)>.
+F<mailpostgw> is an Evolution filter that allows mail to be gatewayed into a local news system
+on a system with no functional L<sendmail(8)>.
+How the gatewaying works is controlled by a systemwide configuration file.
 
-F<mailpostgw> reads a maildir-format mail (the format used by Evolution) from standard input.
-It first reads the mail’s headers.
+After receiving a maildir-formatted mail (the format used by Evolution) from standard input,
+F<mailpostgw> analyzes the mail headers to see if it detects a mailing list described by the configuration file.
 If it detects a recognized mailing list,
-it creates a pipe to L<mailpost> to send the headers, then continues to pipe the rest of the mail to L<mailpost>;
+it opens a pipe to L<sudo(8)> to run L<mailpost(8)> to send the headers,
+then continues to pipe it rest of the mail;
 if no mailing list is detected it simply exits.
 
-F<mailpostgw> uses a ini-style configuration file, L<lists.dat(5)>, to determine
+Because F<mailpostgw> runs as an Evolution filter, L<sudo(8)> must be configured
+to allow the installed copy of F<mailpostgw> to run as the system’s I<@@NEWSUSER@@> user
+without requiring a password.
+
+F<mailpostgw> uses an ini-style configuration file, L<lists.dat(5)>, to determine
 how what addresses and List-Id’s should be fed into which newsgroups.
 You can specify what tags should be removed from the Subject header and,
 in case of read-only broadcast lists, you can specify what should go into the Organization header.
@@ -634,7 +640,7 @@ The real mailpost script (that needs to be run as the I<@@NEWSUSER@@> user), fro
 
 =item @@INPUT@@
 
-A map of how mailing lists you receive should be fed into your local news spool
+Configuration file that maps how mailing lists you receive should be fed into your local news spool
 
 =back
 
