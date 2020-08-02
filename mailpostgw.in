@@ -115,7 +115,9 @@ sub check_for_correct_user () {
       die "$appName: Failed to switch uid to $newsuser\n" if defined $ENV{$flag};
       $ENV{$flag} = '1';
       my $self = $1 if $0 =~ /^(.*)$/; # untaint
-      my @cmd = ('@@SUDO@@', '-n', '-u', $newsuser, '--', $self, @original_argv);
+      my @cmd = ('@@SUDO@@', '-n', '-u', $newsuser, '--', $self);
+      push @cmd, '-v' if $verbose_p; # from config file, maybe
+      push @cmd, @original_argv;
       debug_message sprintf 'Executing command: %s', join(' ', @cmd) if $debug_p || $verbose_p;
       flush STDERR;
       exec { $cmd[0] } @cmd;
@@ -605,9 +607,14 @@ GetOptions(
 die "$appName: Unknown options @ARGV\n" if @ARGV;
 
 $ENV{LANG} = 'C';
+delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV', 'LC_CTYPE', 'LC_ALL'};
+
+read_config_file;
+$verbose_p = 1 if get_scalar('verbose', $lists->{''}) =~ /^(?:1|[ty]\w*)$/i;
+
+print STDERR "$appName started as user $>\n" if $verbose_p;
 
 check_for_correct_user;
-read_config_file;
 look_at_stdin;
 exit $status;
 
