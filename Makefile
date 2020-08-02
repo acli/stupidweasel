@@ -62,6 +62,9 @@ all_targets=$(addprefix $(bindir)/,$(targets)) \
 	$(addprefix $(mandir)/man8/,$(man8_targets))
 
 install: $(all_targets)
+ifneq (,$(findstring mailpostgw,$(all_targets)))
+	if test -f mailpostgw; then grep -q '$(datdir)' mailpostgw || (rm -f mailpostgw; make mailpostgw); else true; fi
+endif
 	for i in $(symlinks); do (cd $(bindir) && if [ ! -f "$$i" ]; then ln -sf stupidweasel "$$i"; elif [ ! -L "$$i" ]; then echo "$$i not installed because it is a file" >&2; elif [ stupidweasel != "`readlink "$$i"`" ]; then echo "$$i not installed because it is a symlink to a different command" >&2; fi ); done
 
 uninstall:
