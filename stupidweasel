@@ -38,6 +38,8 @@ use vars qw( %dsn_option );
 use vars qw( %targets );
 use vars qw( $status );
 
+%dsn_option = { 'failure' => 1, 'delay' => 1 };
+
 $appName = $& if $0 =~ /[^\/]+$/;
 $hostname = hostname;
 
