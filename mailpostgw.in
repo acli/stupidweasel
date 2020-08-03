@@ -368,7 +368,8 @@ sub inject_header ($$$;$) {
       if ($key =~ /^(?:Status$|X-Evolution-)/i) {
 	 debug_message "DEBUG: Discarding meaningless header $s" if $debug_p > 1;
 	 undef $s;
-      } elsif ($key =~ /^(?:(?:ARC|X-BHAM-STAMP|DKIM|X-IPAS|IronPort|X-IronPort)-)/
+      } elsif ($key =~ /^(?:(?:ARC|X-BHAM-STAMP|DKIM|X-CHCH|X-IPAS|Iron[Pp]ort|X-Iron[Pp]ort)-)/
+	    || $key =~ /^(?:X-CHA)$/
 	    || $key =~ /^(?:X-Google-DKIM-Signature|Received-SPF)$/) {
 
 	 debug_message "DEBUG: Discarding unwanted header $s" if $debug_p > 1;

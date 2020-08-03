@@ -50,10 +50,11 @@ dat_targets=
 
 endif
 man8_targets=$(addsuffix .8,$(targets))
+sources=mailpostgw.in
 
 all: check doc
 
-check: $(addsuffix .chk,$(targets))
+check: $(addsuffix .chk,$(targets) $(sources))
 
 doc: stupidweasel.8
 
