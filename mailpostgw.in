@@ -224,6 +224,7 @@ sub scan_mbox_file ($$$$$) {
 
 sub read_config_file () {
    my $input = $mailing_list_definition_file;
+   debug_message "Reading configuration fro $input" if $debug_p || $verbose_p;
    open INPUT, '<', $input || die "$input: $!\n";
    $lists = read_data INPUT;
    close INPUT;
@@ -260,13 +261,27 @@ sub known_mailing_lists_for ($) {
 sub determine_newsgroups_from_header_hash ($) {
    my($headers) = @_;
    my %newsgroups;
+   my $subject = get_scalar('subject', $headers);
    for my $candidate ('from', 'to', 'cc', 'delivered-to', 'mailing-list', 'list-id') {
       my $candidates = get_array($candidate, $headers);
       if (defined $candidates) {
 	 for my $det (@$candidates) {
 	    my %det = known_mailing_lists_for(extract_possible_email_address_from($det));
 	    for my $group (keys %det) {
-	       $newsgroups{$group} = $det{$group};
+	       my $ok_p;
+	       my $select_subject = get_array('select subject', $det{$group}->{'list'});
+	       if ($select_subject) {
+		  $ok_p = 0;
+		  for my $filter (@$select_subject) {
+		     $ok_p = 1 if $subject =~ $filter;
+		     debug_message "DEBUG: $group: subject filter /$filter/ on ($subject) -> $ok_p" if $debug_p;
+		  last if $ok_p;
+		  }
+	       } else {
+		  debug_message "DEBUG: ok, no subject filter for $group" if $debug_p;
+		  $ok_p = 1;
+	       }
+	       $newsgroups{$group} = $det{$group} if $ok_p;
 	    }
 	 }
       }
@@ -326,6 +341,7 @@ sub newsgroups_list_is_the_blackhole_p ($) {
 
 sub decode_qp ($) {
    my($s) = @_;
+   $s =~ s{_}{ }gs;
    $s =~ s{=([0-9a-f][0-9a-f])}{ chr(hex($1)) }egis;
    return $s;
 }
