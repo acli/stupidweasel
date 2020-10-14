@@ -52,6 +52,9 @@ use vars qw( $tag2 );
 use vars qw( $status );
 use vars qw( %localgroups $lists );
 
+use vars qw( @useless_tags );
+@useless_tags = ('*****SPAM*****', '[BULK]');
+
 use vars qw( @original_argv );
 @original_argv = map { $1 if /^(.*)$/ } @ARGV; # untaint
 
@@ -435,8 +438,9 @@ sub remove_tag_from_subject_header ($$$) {
    my $it;
    my $subject = get_scalar('subject', $header_dict);
    my $tags = get_array('tag', $newsgroups->{+(keys(%$newsgroups))[0]}->{'list'});
+   $tags = [] unless defined $tags; # force @useless_tags processing
    if ($subject && $tags) {
-      for my $tag (@$tags) {
+      for my $tag (@useless_tags, @$tags) {
 	 my $re = quotemeta($tag) . '\s+';
 	 $subject =~ s/$re//gs;
       }
