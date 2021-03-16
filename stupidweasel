@@ -196,7 +196,7 @@ It returns 1 if they all look valid, 0 otherwise.
 sub looks_like_email_address_p {
    my $it = 1; # assume it's true then disprove it
    for my $s (@_) {
-      $it = 0 unless $s =~ /^[^\@]+\@[a-z][-0-9a-z]*(?:\.[a-z][-0-9a-z]*)+$/;
+      $it = 0 unless $s =~ /^[^\@]+\@[a-z][-0-9a-z]*(?:\.[a-z][-0-9a-z]*)+$/i;
    last unless $it;
    }
    return $it;
