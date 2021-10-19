@@ -7,7 +7,7 @@
 
 slgw – sysline gateway
 =cut
-# Copyright ©2020 by Ambrose Li <ambrose.li@gmail.com>
+# Copyright ©2020, 2021 by Ambrose Li <ambrose.li@gmail.com>
 
 use strict;
 use integer;
@@ -21,6 +21,7 @@ use charnames qw( :full :short );
 use feature "unicode_strings";
 
 use POSIX;
+use Fcntl qw(:flock);
 use Getopt::Long qw(:config no_auto_abbrev bundling no_ignore_case);
 
 use Data::Dumper;
@@ -30,6 +31,7 @@ use vars qw( $dry_run_p );
 use vars qw( $test_p );
 use vars qw( $n );
 use vars qw( $output_path );
+use vars qw( $queue_path );
 
 use vars qw( $prefer_cr_hack_p );
 $prefer_cr_hack_p = 1;
@@ -41,64 +43,95 @@ GetOptions(
 ) || exit(1);
 
 $output_path = $test_p? '/tmp/slgw.out': "/var/mail/$ENV{USER}";
+$queue_path = $test_p? '/tmp/slgw.tmp': "$ENV{USER}/.cache/stupidweasel/queue";
 
-open(OUTPUT, '>>', $output_path) || die "$output_path: $!\n";
-my($headers, $from);
-my($encoding, $qp_p);
-my($type, $multipart_p);
-for (;;) {
-  my $s = scalar <>;
-last unless defined $s;
-  $headers .= $s;
-last if $s eq "\n";
-  if ($s =~ /^From:.*<([^<>\s]*)>/si) {
-    $from = $1;
-  } elsif ($s =~ /^From:\s*(\S+)\s*$/si) {
-    $from = $1;
-  } elsif ($s =~ /^From:\s*(.*)\s*$/si) {
-    $from = $1;
-    $from =~ s/\([^\(\)]*?\)//sg;
-    $from =~ s/^\s+//s;
-    $from =~ s/\s+$//s;
-    $from = $1 if $from =~ /\s/ && $from =~ /([^\s\@]+\@[^\s\@]+)/; # XXX
-  } elsif ($s =~ /^Content-Type:\s*([^\s;]+)/is) {
-    $type = lc $1;
-    $multipart_p = $type =~ /^multipart\//;
-    print STDERR "Content-Type detected, type is $type\n" if $debug_p;
-  } elsif ($s =~ /^Content-Transfer-Encoding:\s*([^\s;]+)/is) {
-    $encoding = lc $1;
-    $qp_p = $encoding eq 'quoted-printable';
-    print STDERR "Content-Transfer-Encoding detected, encoding is $encoding\n" if $debug_p;
+sub send_to_mbox_file (;*$) {
+  my($h, $label) = @_;
+  my($headers, $from);
+  my($encoding, $qp_p);
+  my($type, $multipart_p);
+  ($h, $label) = (*STDIN, '(stdin)') unless defined $h;
+  for (;;) {
+    my $s = scalar <$h>;
+  last unless defined $s;
+    $headers .= $s;
+  last if $s eq "\n";
+    if ($s =~ /^From:.*<([^<>\s]*)>/si) {
+      $from = $1;
+    } elsif ($s =~ /^From:\s*(\S+)\s*$/si) {
+      $from = $1;
+    } elsif ($s =~ /^From:\s*(.*)\s*$/si) {
+      $from = $1;
+      $from =~ s/\([^\(\)]*?\)//sg;
+      $from =~ s/^\s+//s;
+      $from =~ s/\s+$//s;
+      $from = $1 if $from =~ /\s/ && $from =~ /([^\s\@]+\@[^\s\@]+)/; # XXX
+    } elsif ($s =~ /^Content-Type:\s*([^\s;]+)/is) {
+      $type = lc $1;
+      $multipart_p = $type =~ /^multipart\//;
+      print STDERR "Content-Type detected, type is $type\n" if $debug_p;
+    } elsif ($s =~ /^Content-Transfer-Encoding:\s*([^\s;]+)/is) {
+      $encoding = lc $1;
+      $qp_p = $encoding eq 'quoted-printable';
+      print STDERR "Content-Transfer-Encoding detected, encoding is $encoding\n" if $debug_p;
+    }
+    $n += 1;
   }
-  $n += 1;
+  if ($n) {
+    $from = 'MAILER-DAEMON' unless defined $from && $from =~ /\@/ && $from !~ /\s/;
+    print STDERR "from=($from)\n" if $debug_p;
+    print OUTPUT sprintf("From %s %s\n", $from, scalar gmtime) unless $dry_run_p;
+    print OUTPUT $headers unless $dry_run_p;
+    for (;;) {
+      my $s = scalar <$h>;
+    last unless defined $s;
+      $s = "$1$2" if $s =~ /^(.*?)\r(\n)$/s; # apparently Evolution adds \r to literally every single line, but only in the body
+      if ($s =~ /^From /s) {
+	print STDERR "Bare \"From \" in message body, trying to work around\n" if $debug_p;
+	if ($qp_p) {
+	  $s =~ s/^F/=46/s;
+	} elsif ($multipart_p) { # do nothing if multipart, on the assumption that mail cannot terminate before the final MIME boundary
+	  ;
+	} elsif ($prefer_cr_hack_p) {
+	  $s = "$1\r$2" if $s =~ /^(.*?[^\r])(\n)$/s; # re-insert \r on the assumption headers cannot end in \r\n
+	} else {
+	  $s =~ s/^/>/s;
+	}
+      }
+      print OUTPUT $s unless $dry_run_p;
+      $n += 1;
+    }
+  }
+  print OUTPUT "\n" if $n;	# doesn't matter for sysline; needed to keep the file actual mbox format
+  print "$n line(s) read from $label\n" if $debug_p;
 }
-if ($n) {
-  $from = 'MAILER-DAEMON' unless defined $from && $from =~ /\@/ && $from !~ /\s/;
-  print STDERR "from=($from)\n" if $debug_p;
-  print OUTPUT sprintf("From %s %s\n", $from, scalar gmtime) unless $dry_run_p;
-  print OUTPUT $headers unless $dry_run_p;
+
+sub run_cmd (@) {
+  my(@cmd) = @_;
+  my $st = system { $cmd[0] } @cmd;
+  return $st;
+}
+
+sub send_to_queue () {
+  run_cmd ('mkdir', '-p', $queue_path);
+  my $id = sprintf('%ld-%d', time, $$);
+  my $output_path = "$queue_path/$id";
+  open(OUTPUT, '>', $output_path) or die "$output_path: $!\n";
   for (;;) {
     my $s = scalar <>;
   last unless defined $s;
-    $s = "$1$2" if $s =~ /^(.*?)\r(\n)$/s; # apparently Evolution adds \r to literally every single line, but only in the body
-    if ($s =~ /^From /s) {
-      print STDERR "Bare \"From \" in message body, trying to work around\n" if $debug_p;
-      if ($qp_p) {
-	$s =~ s/^F/=46/s;
-      } elsif ($multipart_p) { # do nothing if multipart, on the assumption that mail cannot terminate before the final MIME boundary
-	;
-      } elsif ($prefer_cr_hack_p) {
-	$s = "$1\r$2" if $s =~ /^(.*?[^\r])(\n)$/s; # re-insert \r on the assumption headers cannot end in \r\n
-      } else {
-	$s =~ s/^/>/s;
-      }
-    }
-    print OUTPUT $s unless $dry_run_p;
-    $n += 1;
+    print OUTPUT;
   }
+  close OUTPUT;
 }
-print OUTPUT "\n" if $n;	# doesn't matter for sysline; needed to keep the file actual mbox format
-print "$n line(s) read\n" if $debug_p;
+
+if (open(OUTPUT, '>>', $output_path) && flock(*OUTPUT, LOCK_EX)) {
+  send_to_mbox_file;
+} else {
+  print STDERR "$output_path: $!\n";
+  send_to_queue;
+  exit(1);
+}
 
 __END__
 
