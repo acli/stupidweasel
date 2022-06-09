@@ -38,7 +38,7 @@ use vars qw( %dsn_option );
 use vars qw( %targets );
 use vars qw( $status );
 
-%dsn_option = { 'failure' => 1, 'delay' => 1 };
+%dsn_option = ( 'failure' => 1, 'delay' => 1 );
 
 $appName = $& if $0 =~ /[^\/]+$/;
 $hostname = hostname;
@@ -287,14 +287,14 @@ sub read_evolution_sources () {
 	    my $uid = get_scalar('IdentityUid', $mail_account);
 	    my $email = get_scalar('User', $authentication);
 	    if (defined $uid && defined $email) {
-	       printf STDERR "%s: %s: Detected email (%s) with X-Evolution-Identity (%s)\n", $appName, $dirent, $email, $uid if $debug_p;
+	       printf STDERR "%s: %s: Email (%s) has X-Evolution-Identity (%s)\n", $appName, $dirent, $email, $uid if $debug_p;
 	       $identity{+lc $email} = $uid;
 	    }
 	 } elsif (defined $mail_identity) {
 	    my $email = get_scalar('Address', $mail_identity);
 	    my $signature = get_scalar('SignatureUid', $mail_identity);
 	    if (defined $email && defined $signature) {
-	       printf STDERR "%s: %s: Detected email (%s) with signature (%s)\n", $appName, $dirent, $email, $signature if $debug_p;
+	       printf STDERR "%s: %s: Email (%s) has signature (%s)\n", $appName, $dirent, $email, $signature if $debug_p;
 	       $signature{+lc $email} = $signature;
 	    }
 	 }
@@ -476,6 +476,7 @@ sub copy_signature_to (*$$) {
    if ($signature) {
       $signature = "$signatures/$signature";
       while (-l $signature) {
+	 print STDERR "$appName: dereferencing $signature...\n" if $debug_p > 1;
 	 $signature = readlink $signature;
       }
       print STDERR "$appName: Signature for $from <$uid> resolves to ($signature)\n" if $debug_p;
@@ -533,6 +534,8 @@ sub copy_stdin_to_outbox () {
 	 });
    close OUTPUT;
    check_for_valid_uid $uid; # in case we got just headers and no body
+
+   # Note: In dry run mode the rename usually does nothing because $tmp is in the current directory
    print STDERR "$appName: Moving ($tmp) -> ($out)\n" if $debug_p;
    rename $tmp, $out || die "$appName: $out: Rename to \"$out\" failed\n";
 }
@@ -544,11 +547,11 @@ GetOptions(
    'q|list'		=> sub { $mode = 'q'; },
    'delete=s'		=> sub { $mode = 'rm'; $targets{$_[1]} = 0; },
    't|add'		=> sub { $mode = undef; },
-   'd|debug'		=> \$debug_p,
+   'd|debug+'		=> \$debug_p,
    'i|interactive'	=> \$interactive_p,
    'N|dsn=s'		=> sub { set_dsn_options($_[1]); },
    'n|dry-run'		=> \$dry_run_p,
-   'v|verbose'		=> \$verbose_p,
+   'v|verbose+'		=> \$verbose_p,
    'help'		=> \&show_usage_then_exit,
    'version'		=> \&show_version_then_exit,
 ) || show_usage_then_exit(1);
@@ -578,6 +581,7 @@ if ($mode eq 'q') {
 } else {
    copy_stdin_to_outbox;
 }
+printf STDERR "$appName: exiting with status %d\n", $status if $debug_p;
 exit $status;
 
 =head1 See also

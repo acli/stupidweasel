@@ -146,3 +146,10 @@ Delete mode will actually delete the maildir file from the Evolution Outbox.
 The correct way to do it would be to rename the file to include a T (trashed) flag,
 but Evolution seems to have some memory of what the name *ought* to be
 so renaming the mail doesn’t actually seem to work any better than just deleting it.
+
+
+Notes
+=====
+
+Proton Mail will delete both the User-Agent and the X-Mailer headers.
+There is nothing we can do to prevent Proton from doing this.
