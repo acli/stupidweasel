@@ -147,6 +147,10 @@ The correct way to do it would be to rename the file to include a T (trashed) fl
 but Evolution seems to have some memory of what the name *ought* to be
 so renaming the mail doesn’t actually seem to work any better than just deleting it.
 
+If the `(*$insert_signature_here*)` is used
+but no signature is defined (in Evolution) for the email address used,
+the script will exit with an error.
+
 
 Notes
 =====
