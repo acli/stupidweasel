@@ -96,4 +96,4 @@ mailpostgw: mailpostgw.in
 	perl -nle 'print /^(=head1)(.*)/s? "$$1\U$$2": $$_' $< | pod2man --utf8 --section 8 -c 'System Management Manual' -n "$(shell echo "$*"|tr '[:lower:]' '[:upper:]')" > $@
 
 .DELETE_ON_ERROR:
-.PHONEY: all check doc install uninstall
+.PHONEY: all check doc install test uninstall
