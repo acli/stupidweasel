@@ -54,7 +54,7 @@ $queue_path = $test_p? "$logdir/slgw.postponed": "$logdir/queue";
 
 # prepare for logging
 run_cmd ('mkdir', '-p', $logdir);
-if (!$test_p && open(LOG, '>:utf8', $log_path)) {
+if (!$test_p && open(LOG, '>>:utf8', $log_path)) {
   POSIX::dup2(fileno(LOG), 2);	# make stderr same as log file
   STDERR->autoflush(1);
   printf STDERR "slgw started at %s in directory (%s) with arguments [%s]\n",
