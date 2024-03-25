@@ -57,7 +57,10 @@ run_cmd ('mkdir', '-p', $logdir);
 if (!$test_p && open(LOG, '>:utf8', $log_path)) {
   POSIX::dup2(fileno(LOG), 2);	# make stderr same as log file
   STDERR->autoflush(1);
-  printf STDERR "slgw started at %s\n", POSIX::strftime('%Y-%m-%d %H:%M:%S %z', localtime);
+  printf STDERR "slgw started at %s in directory (%s) with arguments [%s]\n",
+      POSIX::strftime('%Y-%m-%d %H:%M:%S %z', localtime),
+      POSIX::getcwd,
+      join(' ', map { sprintf '(%s)', s/([\(\)\\])/\\\1/sgr } @ARGV);
 }
 
 sub send_to_mbox_file (;*$) {
@@ -197,11 +200,11 @@ Debug mode. Displays debugging messages on standard error.
 
 =item -n, --dry-run
 
-Dry-run mode. Do not actually append anything to the output file.
+Dry-run mode. Do not actually do anything meaningful. You don’t want this; you want --test instead.
 
 =item -t, --test
 
-Test mode. Changes output file to /tmp/slgw.out.
+Test mode. Changes output file to debug/slgw.out and postponed directory to debug/slgw.postponed.
 
 =back
 
