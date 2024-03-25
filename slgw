@@ -7,7 +7,7 @@
 
 slgw – sysline gateway
 =cut
-# Copyright ©2020, 2021 by Ambrose Li <ambrose.li@gmail.com>
+# Copyright ©2020, 2021, 2024 by Ambrose Li <ambrose.li@gmail.com>
 
 use strict;
 use integer;
@@ -33,6 +33,7 @@ use vars qw( $n );
 use vars qw( $dotlockfile_path );
 use vars qw( $output_path );
 use vars qw( $queue_path );
+use vars qw( $logdir $log_path );
 
 use vars qw( $prefer_cr_hack_p );
 $prefer_cr_hack_p = 1;
@@ -40,14 +41,24 @@ $prefer_cr_hack_p = 1;
 GetOptions(
   'debug|d' => \$debug_p,
   'dry-run|n' => \$dry_run_p,
-  'test' => \$test_p,
+  'test|t' => \$test_p,
 ) || exit(1);
 
 # Mutt uses this, this is probably part of mutt?
 $dotlockfile_path = '/usr/bin/dotlockfile';
 
-$output_path = $test_p? '/tmp/slgw.out': "/var/mail/$ENV{USER}";
-$queue_path = $test_p? '/tmp/slgw.tmp': "$ENV{USER}/.cache/stupidweasel/queue";
+$logdir = $test_p? 'debug': "$ENV{HOME}/.cache/stupidweasel";
+$log_path = "$logdir/log";
+$output_path = $test_p? "$logdir/slgw.out": "/var/mail/$ENV{USER}";
+$queue_path = $test_p? "$logdir/slgw.postponed": "$logdir/queue";
+
+# prepare for logging
+run_cmd ('mkdir', '-p', $logdir);
+if (!$test_p && open(LOG, '>:utf8', $log_path)) {
+  POSIX::dup2(fileno(LOG), 2);	# make stderr same as log file
+  STDERR->autoflush(1);
+  printf STDERR "slgw started at %s\n", POSIX::strftime('%Y-%m-%d %H:%M:%S %z', localtime);
+}
 
 sub send_to_mbox_file (;*$) {
   my($h, $label) = @_;
