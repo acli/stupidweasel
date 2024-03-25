@@ -162,9 +162,11 @@ sub send_to_queue () {
 if (open(OUTPUT, '>>', $output_path) && acquire_lock($output_path)) {
   send_to_mbox_file;
   release_lock($output_path);
+  printf STDERR "slgw terminated normally at %s\n", POSIX::strftime('%Y-%m-%d %H:%M:%S %z', localtime);
 } else {
   print STDERR "$output_path: $!\n";
   send_to_queue;
+  printf STDERR "slgw abended at %s, message sent to postponed file\n", POSIX::strftime('%Y-%m-%d %H:%M:%S %z', localtime);
   exit(1);
 }
 
