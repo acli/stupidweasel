@@ -105,10 +105,12 @@ sub send_to_mbox_file (;*$) {
   for (;;) {
     my $s = scalar <$h>;
   last unless defined $s;
-    if (!defined $n && $s =~ /^(From ).*?<(.*?)>(.*)$/s) {	# From full name <email> date - probably only in saved mboxes
+    if (!defined $n) {
       log_input $s;
-      $s = $1 . $2 . $3;
-      log_output $s;
+      if ($s =~ /^(From ).*?<(.*?)>(.*)$/s) {	# From full name <email> date - probably only in saved mboxes
+	$s = $1 . $2 . $3;
+	log_output $s;
+      }
     }
     $headers .= $s;
   last if $s eq "\n";
