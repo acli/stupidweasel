@@ -57,6 +57,7 @@ sub zlog ($$) {
   my($s, $type) = @_;
   $s =~ s/\n+$//s;
   printf STDERR "%10d-%05d%1.1s\t%s\n", time, $$, $type, $s;
+  STDERR->flush;
 }
 
 sub log_input ($) {
@@ -198,13 +199,12 @@ run_cmd ('mkdir', '-p', $logdir);
 if (!$test_p && open(LOG, '>>:utf8', $log_path)) {
   POSIX::dup2(fileno(LOG), 2);	# make stderr same as log file
   STDERR->autoflush(1);
-  printf STDERR "slgw started at %s in directory (%s) with arguments [%s]\n",
+  $debug_p = 1;
+}
+log_info sprintf "slgw started at %s in directory (%s) with arguments [%s]\n",
       POSIX::strftime('%Y-%m-%d %H:%M:%S %z', localtime),
       POSIX::getcwd,
       join(' ', map { sprintf '(%s)', s/([\(\)\\])/\\\1/sgr } @ARGV);
-
-  $debug_p = 1;
-}
 
 if (open(OUTPUT, '>>', $output_path) && acquire_lock($output_path)) {
   send_to_mbox_file;
