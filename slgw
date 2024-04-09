@@ -120,9 +120,11 @@ sub send_to_mbox_file (;*$) {
       if ($s =~ /^(From ).*?<(.*?)>(.*)$/s) {	# From full name <email> date - probably only in saved mboxes
 	$s = $1 . $2 . $3;
 	$mbox_input_p = 1;
+	log_info 'mbox format detected, trying to fix invalid From_ header';
 	log_output $s;
       } elsif ($s =~ /^From /s) {
 	$mbox_input_p = 1;
+	log_info 'mbox format detected';
       }
     } elsif ($debug_p > 2 || (defined $multilog_path && $debug_p > 1)) {	# always log headers if multilog is used
       log_input $s;
@@ -243,6 +245,10 @@ sub prepare_for_logging () {
   }
 }
 
+END {
+  kill 'TERM', $multilog_pid if defined $multilog_pid;	# must kill multilog via kill or exit, or we'll hang
+}
+
 ### MAIN CODE STARTS HERE
 
 prepare_for_logging;
@@ -255,7 +261,6 @@ if (open(OUTPUT, '>>', $output_path) && acquire_lock($output_path)) {
   send_to_mbox_file;
   release_lock($output_path);
   log_info sprintf "slgw terminated normally at %s\n", POSIX::strftime('%Y-%m-%d %H:%M:%S %z', localtime);
-  kill 'TERM', $multilog_pid if defined $multilog_pid;	# must kill multilog via kill or exit, or we'll hang
 } else {
   log_info "$output_path: $!\n";
   send_to_queue;
