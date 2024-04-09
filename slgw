@@ -204,7 +204,10 @@ sub acquire_lock ($) {
   my $lockfile_path = "$mbox_path.lock";
   die "$lockfile_path: Invalid lock file name\n" unless $lockfile_path =~ /\.lock$/;
   my @cmd = ($dotlockfile_path, '-p', $lockfile_path);
-  return -f $dotlockfile_path && 0 == run_cmd @cmd;
+  log_info "Attempting to acquire lock $lockfile_path" if $debug_p > 1;
+  my $it = -f $dotlockfile_path && 0 == run_cmd @cmd;
+  log_info($it? 'Lock acquired': 'Failed to acquire lock') if $debug_p > 1;
+  return $it;
 }
 
 sub release_lock ($) {
@@ -212,13 +215,17 @@ sub release_lock ($) {
   my $lockfile_path = "$mbox_path.lock";
   die "$lockfile_path: Invalid lock file name\n" unless $lockfile_path =~ /\.lock$/;
   my @cmd = ($dotlockfile_path, '-u', $lockfile_path);
-  return -f $dotlockfile_path && 0 == run_cmd @cmd;
+  log_info 'Attempting to release lock' if $debug_p > 1;
+  my $it = -f $dotlockfile_path && 0 == run_cmd @cmd;
+  log_info($it? 'Lock released': 'Failed to release lock') if $debug_p > 1;
+  return $it;
 }
 
 sub send_to_queue () {
   run_cmd ('mkdir', '-p', $queue_path);
   my $id = sprintf('%ld-%d', time, $$);
   my $output_path = "$queue_path/$id";
+  log_info "Attempting to queue mail to $output_path" if $debug_p > 1;
   open(OUTPUT, '>', $output_path) or die "$output_path: $!\n";
   for (;;) {
     my $s = scalar <>;
@@ -226,6 +233,7 @@ sub send_to_queue () {
     print OUTPUT;
   }
   close OUTPUT;
+  log_info "Queue file closed" if $debug_p > 1;
 }
 
 sub prepare_for_logging () {
