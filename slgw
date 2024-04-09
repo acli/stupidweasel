@@ -189,7 +189,7 @@ sub send_to_mbox_file (;*$) {
     }
   }
   print OUTPUT "\n" if $n;	# doesn't matter for sysline; needed to keep the file actual mbox format
-  log_info sprintf "%d line(s) (%s%d header, %d body) read from $label\n", $n, ($mbox_input_p? '1 From, ': ''), $n_header_lines, $n_body_lines, $label if $debug_p;
+  log_info sprintf "%d line(s) (%s%d header, %d body) read from $label\n", $n, ($mbox_input_p? '1 From_, ': ''), $n_header_lines, $n_body_lines, $label if $debug_p;
 }
 
 sub run_cmd (@) {
