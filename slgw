@@ -46,6 +46,7 @@ GetOptions(
   'dry-run|n' => \$dry_run_p,
   'force-log' => \$force_log_p,
   'test|t' => \$test_p,
+  'help' => \&show_usage_then_exit,
 ) || exit(1);
 
 # Mutt uses this, this is probably part of mutt?
@@ -243,6 +244,24 @@ sub prepare_for_logging () {
       $debug_p = 2;
     }
   }
+}
+
+sub show_usage_then_exit (;$) {
+  my($st) = @_;
+  my $h = $st? *STDERR: *STDOUT;
+  print $h <<EOF;
+Usage: slgw [OPTION]...
+Send input to mailbox so that sysline knows mail has arrived.
+
+  -d, --debug       show debugging messages
+  -n, --dry-run     do not do anything useful
+      --force-log   force logging even in --test mode
+  -t, --test        debug directory, do not touch real mailbox and real logs
+      --help        display this help and exit
+
+slgw normally runs as a filter in Evolution.
+EOF
+  exit $st;
 }
 
 END {
