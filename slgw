@@ -27,10 +27,13 @@ use Getopt::Long qw(:config no_auto_abbrev bundling no_ignore_case);
 use Data::Dumper;
 
 use vars qw( $debug_p );
+use vars qw( $force_log_p );
 use vars qw( $dry_run_p );
 use vars qw( $test_p );
 use vars qw( $n );
 use vars qw( $dotlockfile_path );
+use vars qw( $multilog_path );
+use vars qw( $multilog_pid );
 use vars qw( $output_path );
 use vars qw( $queue_path );
 use vars qw( $logdir $log_path );
@@ -41,11 +44,17 @@ $prefer_cr_hack_p = 1;
 GetOptions(
   'debug|d' => \$debug_p,
   'dry-run|n' => \$dry_run_p,
+  'force-log' => \$force_log_p,
   'test|t' => \$test_p,
 ) || exit(1);
 
 # Mutt uses this, this is probably part of mutt?
 $dotlockfile_path = '/usr/bin/dotlockfile';
+
+# try to use multilog if it's available
+$multilog_path = '/command/multilog';				# standard location
+$multilog_path = '/usr/bin/multilog' if !-f $multilog_path;	# Ubuntu standard location
+undef $multilog_path unless -f $multilog_path;
 
 $logdir = $test_p? 'debug': "$ENV{HOME}/.cache/stupidweasel";
 $log_path = "$logdir/log";
@@ -102,6 +111,7 @@ sub send_to_mbox_file (;*$) {
   my($encoding, $qp_p);
   my($type, $multipart_p);
   ($h, $label) = (*STDIN, '(stdin)') unless defined $h;
+  my $mbox_input_p = 0;
   for (;;) {
     my $s = scalar <$h>;
   last unless defined $s;
@@ -109,8 +119,13 @@ sub send_to_mbox_file (;*$) {
       log_input $s;
       if ($s =~ /^(From ).*?<(.*?)>(.*)$/s) {	# From full name <email> date - probably only in saved mboxes
 	$s = $1 . $2 . $3;
+	$mbox_input_p = 1;
 	log_output $s;
+      } elsif ($s =~ /^From /s) {
+	$mbox_input_p = 1;
       }
+    } elsif ($debug_p > 2 || (defined $multilog_path && $debug_p > 1)) {	# always log headers if multilog is used
+      log_input $s;
     }
     $headers .= $s;
   last if $s eq "\n";
@@ -138,7 +153,7 @@ sub send_to_mbox_file (;*$) {
   if ($n) {
     $from = 'MAILER-DAEMON' unless defined $from && $from =~ /\@/ && $from !~ /\s/;
     log_info "from=($from)\n" if $debug_p;
-    print OUTPUT sprintf("From %s %s\n", $from, scalar gmtime) unless $dry_run_p;
+    print OUTPUT sprintf("From %s %s\n", $from, scalar gmtime) unless $mbox_input_p || $dry_run_p;
     print OUTPUT $headers unless $dry_run_p;
     for (;;) {
       my $s = scalar <$h>;
@@ -199,15 +214,38 @@ sub send_to_queue () {
   close OUTPUT;
 }
 
+sub prepare_for_logging () {
+  run_cmd ('mkdir', '-p', $logdir);
+  if ($force_log_p || !$test_p) {
+    my $log_opened_p = 0;
+    if (defined $multilog_path) {
+      my @cmd = ($multilog_path, 't', '.');
+      $multilog_pid = open(LOG, '|-');
+      if (!defined $multilog_pid) {	# pipe failed
+	;
+      } elsif (!$multilog_pid) {
+	chdir $logdir || die "$logdir: chdir: $!\n";
+	exec { $cmd[0] } @cmd;
+	die "$cmd[0]: exec: $!\n";
+      } elsif ($multilog_pid) {
+	binmode LOG, ':utf8';
+	$log_opened_p = 1;
+      }
+    }
+    if (!$log_opened_p && open(LOG, '>>:utf8', $log_path)) {
+      $log_opened_p = 1;
+    }
+    if ($log_opened_p) {
+      POSIX::dup2(fileno(LOG), 2);	# make stderr same as log file
+      STDERR->autoflush(1);
+      $debug_p = 2;
+    }
+  }
+}
+
 ### MAIN CODE STARTS HERE
 
-# prepare for logging
-run_cmd ('mkdir', '-p', $logdir);
-if (!$test_p && open(LOG, '>>:utf8', $log_path)) {
-  POSIX::dup2(fileno(LOG), 2);	# make stderr same as log file
-  STDERR->autoflush(1);
-  $debug_p = 1;
-}
+prepare_for_logging;
 log_info sprintf "slgw started at %s in directory (%s) with arguments [%s]\n",
       POSIX::strftime('%Y-%m-%d %H:%M:%S %z', localtime),
       POSIX::getcwd,
@@ -217,6 +255,7 @@ if (open(OUTPUT, '>>', $output_path) && acquire_lock($output_path)) {
   send_to_mbox_file;
   release_lock($output_path);
   log_info sprintf "slgw terminated normally at %s\n", POSIX::strftime('%Y-%m-%d %H:%M:%S %z', localtime);
+  kill 'TERM', $multilog_pid if defined $multilog_pid;	# must kill multilog via kill or exit, or we'll hang
 } else {
   log_info "$output_path: $!\n";
   send_to_queue;
@@ -259,6 +298,10 @@ Debug mode. Displays debugging messages on standard error.
 =item -n, --dry-run
 
 Dry-run mode. Do not actually do anything meaningful. You don’t want this; you want --test instead.
+
+=item --force-log
+
+Force logging even in --test mode. This is used for debugging the logging code.
 
 =item -t, --test
 
