@@ -161,7 +161,7 @@ sub send_to_mbox_file (;*$) {
       if (defined $from && $from =~ /\@/ && $from !~ /\s/) {
 	log_info "Using ($from) for From_ header\n" if $debug_p;
       } else {
-	$from = 'MAILER-DAEMON' unless defined $from && $from =~ /\@/ && $from !~ /\s/;
+	$from = 'MAILER-DAEMON';
 	log_info "No From line seen, using ($from) for From_ header\n" if $debug_p;
       }
       print OUTPUT sprintf("From %s %s\n", $from, scalar gmtime) unless $dry_run_p;
