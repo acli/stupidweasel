@@ -361,6 +361,18 @@ Test mode. Changes output file to debug/slgw.out and postponed directory to debu
 
 =back
 
+=head1 Bugs
+
+Sometimes you’ll get email from MAILER-DAEMON
+with a Subject: No Subject and no contents.
+This appears to be an Evolution bug;
+the only thing you can do is to
+save a copy of the missed message
+and manually pipe it through F<slgw>.
+
+If you run another filter in addition to this one,
+sometimes F<slgw> will get stuck on the other filter.
+
 =head1 See also
 
 L<dotlockfile(1)>,
