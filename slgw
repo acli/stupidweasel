@@ -256,7 +256,7 @@ Send input to mailbox so that sysline knows mail has arrived.
   -d, --debug       show debugging messages
   -n, --dry-run     do not do anything useful
       --force-log   force logging even in --test mode
-  -t, --test        debug directory, do not touch real mailbox and real logs
+  -t, --test        use debug directory; do not touch real mailbox and real logs
       --help        display this help and exit
 
 slgw normally runs as a filter in Evolution.
