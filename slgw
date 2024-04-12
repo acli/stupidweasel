@@ -39,6 +39,7 @@ use vars qw( $multilog_pid );
 use vars qw( $output_path );
 use vars qw( $queue_path );
 use vars qw( $logdir $log_path );
+use vars qw( $abend_reason );
 
 use vars qw( $prefer_cr_hack_p );
 $prefer_cr_hack_p = 1;
@@ -59,16 +60,23 @@ $multilog_path = '/command/multilog';				# standard location
 $multilog_path = '/usr/bin/multilog' if !-f $multilog_path;	# Ubuntu standard location
 undef $multilog_path unless -f $multilog_path;
 
+# determine log locations. Note that if multilog is used
+# we'll have to use a subdirectory to prevent multilog from blocking
+# This is not ideal but there's no way around it
 $logdir = $test_p? 'debug': "$ENV{HOME}/.cache/stupidweasel";
 $log_path = "$logdir/log";
 $output_path = $test_p? "$logdir/slgw.out": "/var/mail/$ENV{USER}";
 $queue_path = $test_p? "$logdir/slgw.postponed": "$logdir/queue";
+if (defined $multilog_path) {
+  my $suffix = sprintf('/%010d-%05d', $t0, $$);
+  $logdir .= $suffix;
+}
 
 # ZMailer style log output so that we don't get completely lost looking at the log file
 sub zlog ($$) {
   my($s, $type) = @_;
   $s =~ s/\n+$//s;
-  printf STDERR "%10d-%05d%1.1s\t%s\n", time, $$, $type, $s;
+  printf STDERR "%010d-%05d%1.1s\t%s\n", time, $$, $type, $s;
   STDERR->flush;
 }
 
@@ -104,7 +112,7 @@ sub set_die_handler () {
     for (my $i = 0; $i < @msg; $i += 1) {
       log_info sprintf "%s%s\n", (' ' x ($_ == $#msg? $_ - 1: $_));
     }
-    die "ABEND\n";
+    exit(2);
   };
 }
 
@@ -291,7 +299,10 @@ BEGIN {
 
 END {
   no integer;
-  log_info sprintf "Run time was %g seconds", Time::HiRes::time - $t0;
+  my $msg = defined $abend_reason? sprintf('ABEND: slgw abended due to %s', $abend_reason): 'slgw terminated normally';
+  $msg .= sprintf ' at %s', POSIX::strftime('%Y-%m-%d %H:%M:%S %z', localtime);
+  $msg .= sprintf "; run time was %g seconds", Time::HiRes::time - $t0;
+  log_info $msg;
   STDERR->flush;	# just in case
   kill 'TERM', $multilog_pid if defined $multilog_pid;	# must kill multilog via kill or exit, or we'll hang
 }
@@ -299,6 +310,15 @@ END {
 ### MAIN CODE STARTS HERE
 
 prepare_for_logging;
+set_die_handler;
+$SIG{'TERM'} = sub {
+      my($sig) = @_;
+      $abend_reason = "SIG$sig";
+      release_lock($output_path) if -f $output_path;
+      exit(3);
+    };
+$SIG{'HUP'} = $SIG{'TERM'};
+
 log_info sprintf "slgw started at %s in directory (%s) with arguments [%s]\n",
       POSIX::strftime('%Y-%m-%d %H:%M:%S %z', localtime),
       POSIX::getcwd,
@@ -307,11 +327,10 @@ log_info sprintf "slgw started at %s in directory (%s) with arguments [%s]\n",
 if (open(OUTPUT, '>>', $output_path) && acquire_lock($output_path)) {
   send_to_mbox_file;
   release_lock($output_path);
-  log_info sprintf "slgw terminated normally at %s\n", POSIX::strftime('%Y-%m-%d %H:%M:%S %z', localtime);
 } else {
   log_info "$output_path: $!\n";
   send_to_queue;
-  log_info sprintf "slgw abended at %s, message sent to postponed file\n", POSIX::strftime('%Y-%m-%d %H:%M:%S %z', localtime);
+  $abend_reason = 'message postponement';
   exit(1);
 }
 
