@@ -55,15 +55,18 @@ GetOptions(
 # Mutt uses this, this is probably part of mutt?
 $dotlockfile_path = '/usr/bin/dotlockfile';
 
+# don't use multilog, it can hang even if we killed it
+if (0) {
 # try to use multilog if it's available
 $multilog_path = '/command/multilog';				# standard location
 $multilog_path = '/usr/bin/multilog' if !-f $multilog_path;	# Ubuntu standard location
 undef $multilog_path unless -f $multilog_path;
+}
 
 # determine log locations. Note that if multilog is used
 # we'll have to use a subdirectory to prevent multilog from blocking
 # This is not ideal but there's no way around it
-$logdir = $test_p? 'debug': "$ENV{HOME}/.cache/stupidweasel";
+$logdir = $test_p? 'debug': -d "$ENV{HOME}/.debug"? "$ENV{HOME}/.debug/stupidweasel": "$ENV{HOME}/.cache/stupidweasel";
 $log_path = "$logdir/log";
 $output_path = $test_p? "$logdir/slgw.out": "/var/mail/$ENV{USER}";
 $queue_path = $test_p? "$logdir/slgw.postponed": "$logdir/queue";
